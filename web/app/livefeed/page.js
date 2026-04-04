@@ -352,9 +352,23 @@ export default function ConcertCompanion() {
 
   function openLightShow() {
     setLightshowOpen(true);
-    if (lightInterval.current) clearInterval(lightInterval.current);
-    lightInterval.current = setInterval(pollLightState, 500);
-    pollLightState();
+    const concertId = searchParams.get("concertId");
+    lightInterval.current = setInterval(async () => {
+      try {
+        const resp = await fetch("/api/concertColor?concertId=" + concertId);
+        const json_resp = await resp.json();
+        if (json_resp.success) {
+          let r = (json_resp.color >> 16) & 0xFF;
+          let g = (json_resp.color >> 8) & 0xFF;
+          let b = json_resp.color & 0xFF;
+          let cssColor = `rgb(${r}, ${g}, ${b})`;
+          setLightBg(cssColor);
+
+        }
+      } catch (e) {
+        console.error("Light show fetch error:", e);
+      }
+    }, 200);
   }
 
   function closeLightShow() {
