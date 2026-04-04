@@ -45,6 +45,34 @@ function randColor(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// Color helpers for light show animation
+function hexToRgb(hex) {
+  const bigint = parseInt(hex.slice(1), 16);
+  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+}
+function hslToRgb(h, s, l) {
+  h /= 360; s /= 100; l /= 100;
+  let r, g, b;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 export default function ConcertCompanion() {
   const [posts, setPosts] = useState([]);
@@ -58,16 +86,22 @@ export default function ConcertCompanion() {
   const [messageInput, setMessageInput] = useState("");
   const [reportInput, setReportInput] = useState("");
   const [dismissedPins, setdismissedPins] = useState([]);
+
+  // Light show state (from backend)
+  const [lightEffect, setLightEffect] = useState("solid");
+  const [lightBaseColor, setLightBaseColor] = useState("#007EA7");
+
   const nextId = useRef(10);
   const reportBuckets = useRef([]);
   const lightInterval = useRef(null);
+  const animationFrameId = useRef(null);
   const cameraStream = useRef(null);
   const videoRef = useRef(null);
   const msgRef = useRef(null);
   const rptRef = useRef(null);
   const searchParams = useSearchParams();
 
-
+  // ── Fetch messages & admin notes ─────────────────────────────────────────
   function fetchMessages() {
     fetch("/api/chat/get?concertId=" + searchParams.get("concertId")).then(async (response) => {
       let json_response = await response.json()
@@ -94,7 +128,7 @@ export default function ConcertCompanion() {
     return () => clearInterval(id)
   }, [dismissedPins, adminNotes])
 
-  // ── Stable visualizer bars (randomised once) ────────────────────────────
+  // ── Visualizer bars ─────────────────────────────────────────────────────
   const visBars = useMemo(
     () =>
       Array.from({ length: 28 }, (_, i) => ({
@@ -107,8 +141,7 @@ export default function ConcertCompanion() {
     []
   );
 
-
-
+  // ── Admin notes ─────────────────────────────────────────────────────────
   function dismissAdminNote(id) {
     console.log(id)
     setAdminNotes(adminNotes.filter(n => n.idChatMessage != id))
@@ -134,15 +167,11 @@ export default function ConcertCompanion() {
   function toggleLike(postId) {
     if (posts.filter((p) => p.idChatMessage == postId)[0].hasUpvoted) {
       fetch("/api/chat/unheart", {
-        method: "POST", body: JSON.stringify({
-          "messageId": postId
-        })
+        method: "POST", body: JSON.stringify({ "messageId": postId })
       })
     } else {
       fetch("/api/chat/heart", {
-        method: "POST", body: JSON.stringify({
-          "messageId": postId
-        })
+        method: "POST", body: JSON.stringify({ "messageId": postId })
       })
     }
   }
@@ -169,7 +198,7 @@ export default function ConcertCompanion() {
     expireBadge(id);
   }
 
-  // ── Report / similarity ─────────────────────────────────────────────────
+  // ── Report ──────────────────────────────────────────────────────────────
   function submitReport(text) {
     fetch("/api/chat/post", {
       method: "POST", body: JSON.stringify({
@@ -204,20 +233,21 @@ export default function ConcertCompanion() {
     closeReport();
   }
 
+  // ── GIF picker (fixed) ─────────────────────────────────────────────────
   async function postGif(src) {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    fetch("/api/chat/post", {
-      method: "POST", body: JSON.stringify({
+    await fetch("/api/chat/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         messageType: "gif",
         concertId: searchParams.get("concertId"),
         messageData: src
       })
-    })
+    });
     closeCompose();
   }
 
-  // ── Camera ──────────────────────────────────────────────────────────────
+  // ── Camera (fixed) ──────────────────────────────────────────────────────
   async function openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -225,7 +255,6 @@ export default function ConcertCompanion() {
         audio: false,
       });
       cameraStream.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
       setCameraOpen(true);
       closeCompose();
     } catch (err) {
@@ -239,48 +268,101 @@ export default function ConcertCompanion() {
     cameraStream.current = null;
   }
 
+  // Attach stream after video element appears
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && cameraStream.current) {
+      videoRef.current.srcObject = cameraStream.current;
+      videoRef.current.play().catch(e => console.warn("autoplay failed", e));
+    }
+  }, [cameraOpen]);
+
   function snapPhoto() {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || video.videoWidth === 0) {
+      alert("Camera not ready yet. Please wait a moment.");
+      return;
+    }
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
     fetch("/api/chat/post", {
-      method: "POST", body: JSON.stringify({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         messageType: "image",
         concertId: searchParams.get("concertId"),
         messageData: canvas.toDataURL("image/jpeg")
       })
-    })
+    });
     closeCamera();
   }
 
-  // ── Light show ──────────────────────────────────────────────────────────
+  // ── Light show (with breath/rainbow animation) ──────────────────────────
+  function pollLightState() {
+    const concertId = searchParams.get("concertId");
+    if (!concertId) return;
+    fetch(`/api/concertState?concertId=${concertId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setLightBaseColor(data.color);
+          setLightEffect(data.effect);
+        }
+      })
+      .catch(err => console.error("Light state poll error:", err));
+  }
+
+  const startLightAnimation = useCallback(() => {
+    if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+    const animate = () => {
+      if (!lightshowOpen) return;
+      let r, g, b;
+      const base = hexToRgb(lightBaseColor);
+      if (lightEffect === "breath") {
+        const t = (Date.now() / 1000) % 2;
+        const intensity = 0.2 + 0.8 * (0.5 + 0.5 * Math.sin(t * Math.PI));
+        r = Math.min(255, Math.round(base.r * intensity));
+        g = Math.min(255, Math.round(base.g * intensity));
+        b = Math.min(255, Math.round(base.b * intensity));
+      } else if (lightEffect === "rainbow") {
+        const hue = (Date.now() / 30) % 360;
+        const rgb = hslToRgb(hue, 100, 50);
+        r = rgb.r; g = rgb.g; b = rgb.b;
+      } else {
+        r = base.r; g = base.g; b = base.b;
+      }
+      setLightBg(`rgb(${r}, ${g}, ${b})`);
+      animationFrameId.current = requestAnimationFrame(animate);
+    };
+    animate();
+  }, [lightEffect, lightBaseColor, lightshowOpen]);
+
+  useEffect(() => {
+    if (!lightshowOpen && animationFrameId.current) {
+      cancelAnimationFrame(animationFrameId.current);
+      animationFrameId.current = null;
+    }
+    if (lightshowOpen) startLightAnimation();
+  }, [lightshowOpen, startLightAnimation]);
+
+  useEffect(() => {
+    if (lightshowOpen) startLightAnimation();
+  }, [lightEffect, lightBaseColor, lightshowOpen, startLightAnimation]);
+
   function openLightShow() {
     setLightshowOpen(true);
-    setLightBg(randColor(LIGHT_SHOW_COLORS));
-    const concertId = searchParams.get("concertId");
-    lightInterval.current = setInterval(async () => {
-      try {
-        const resp = await fetch("/api/concertColor?concertId=" + concertId);
-        const json_resp = await resp.json();
-        if (json_resp.success) {
-          let r = (color_code >> 16) & 0xFF;
-          let g = (color_code >> 8) & 0xFF;
-          let b = color_code & 0xFF;
-          let cssColor = `rgb(${r}, ${g}, ${b})`;
-        }
-      } catch (e) {
-        console.error("Light show fetch error:", e);
-      }
-    }, 200);
+    if (lightInterval.current) clearInterval(lightInterval.current);
+    lightInterval.current = setInterval(pollLightState, 500);
+    pollLightState();
   }
 
   function closeLightShow() {
     setLightshowOpen(false);
-    clearInterval(lightInterval.current);
-    lightInterval.current = null;
+    if (lightInterval.current) {
+      clearInterval(lightInterval.current);
+      lightInterval.current = null;
+    }
   }
 
   // ── Sort: pinned reports float to top ───────────────────────────────────
@@ -447,7 +529,6 @@ export default function ConcertCompanion() {
                 setReportOpen((o) => !o);
               }}
             >
-              {/* lordicon loads after hydration */}
               <lord-icon
                 src="https://cdn.lordicon.com/lltgvngb.json"
                 trigger="loop"
@@ -537,20 +618,22 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* ── Camera overlay ── */}
+        {/* ── Camera overlay (fixed) ── */}
         {cameraOpen && (
           <div className="camera-overlay open">
-            <video ref={videoRef} autoPlay playsInline />
+            <video ref={videoRef} autoPlay playsInline muted />
             <div className="camera-controls">
               <button className="camera-close-btn" onClick={closeCamera}>✕</button>
-              <button className="camera-snap-btn" onClick={snapPhoto}>      <lord-icon
-                src="https://cdn.lordicon.com/wsaaegar.json"
-                trigger="loop"
-                delay="500"
-                stroke="bold"
-                colors="primary:#30c9e8,secondary:#16a9c7"
-                style={{ width: 32, height: 32 }}
-              /></button>
+              <button className="camera-snap-btn" onClick={snapPhoto}>
+                <lord-icon
+                  src="https://cdn.lordicon.com/wsaaegar.json"
+                  trigger="loop"
+                  delay="500"
+                  stroke="bold"
+                  colors="primary:#30c9e8,secondary:#16a9c7"
+                  style={{ width: 32, height: 32 }}
+                />
+              </button>
             </div>
           </div>
         )}
@@ -559,7 +642,7 @@ export default function ConcertCompanion() {
         {lightshowOpen && (
           <div
             className="lightshow-overlay open"
-            style={{ backgroundColor: lightBg, transition: "background-color 0.2s ease" }}
+            style={{ backgroundColor: lightBg, transition: "background-color 0.02s linear" }}
             onClick={closeLightShow}
           >
             <span className="lightshow-tap-hint">tap to close</span>
@@ -570,7 +653,7 @@ export default function ConcertCompanion() {
   );
 }
 
-// ── All styles (faithful port of styles.css) ─────────────────────────────────
+// ── All styles (unchanged) ─────────────────────────────────────────────────
 const STYLES = `
   :root {
     --bg:          #0a0a12;
