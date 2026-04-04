@@ -1,62 +1,63 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-// Step 1 — user enters their phone number
-// Step 2 — only shown if the phone is NOT in the DB, asks for a username
-// After step 2 (or step 1 if phone already exists) → redirect to /livefeed
+// ── Inner component — needs Suspense because useSearchParams reads the URL ──
+function UserOnboardingInner() {
+  const router      = useRouter();
+  const searchParams = useSearchParams();
+  const concertId   = searchParams.get("concertId"); // passed via QR code URL
 
-export default function UserOnboarding() {
-  const router = useRouter();
-
-  // "phone" = step 1, "username" = step 2
-  const [step, setStep] = useState("phone");
-
-  const [phone, setPhone] = useState("");
+  const [step,     setStep]    = useState("phone");   // "phone" → "username"
+  const [phone,    setPhone]   = useState("");
   const [username, setUsername] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const searchParams = useSearchParams()
-  // Fade the card in on load
+  const [error,    setError]   = useState("");
+  const [loading,  setLoading] = useState(false);
+  const [visible,  setVisible] = useState(false);
+
+  // Fade-in on load
   useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), 50);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(t);
   }, []);
 
 
-  // ── Step 1: submit phone number ──────────────────────────
+  // ── Step 1: try to log in with phone number ──────────────────────────────
+  // If the phone is registered for this concert → session cookie is set → go to feed.
+  // If not registered → move to step 2 to collect a username.
   async function submitPhone(e) {
     e.preventDefault();
     setError("");
 
-    // Basic format check before hitting the API
-    
     if (!phone.trim()) { setError("Phone number is required."); return; }
     if (!/^\+?[\d\s\-().]{7,15}$/.test(phone.trim())) {
       setError("Enter a valid phone number.");
       return;
     }
+    if (!concertId) {
+      setError("No concert found. Please scan the QR code again.");
+      return;
+    }
 
     setLoading(true);
     try {
-      // Ask the API: does this phone already have a username in the DB?
-      const res = await fetch('/api/user/login', {
-        method: "POST", body: JSON.stringify({
-          phoneNumber: phone,
-          concertId: searchParams.get("concertId")
-        })
-      })
+      const res  = await fetch("/api/user/login", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ phoneNumber: phone.trim(), concertId }),
+      });
       const data = await res.json();
+
       if (data.success) {
-        // Phone found — save and go straight to the feed
-        router.push("/livefeed");
+        // Already registered — session cookie set by the server, go straight to feed
+        router.push(`/livefeed?concertId=${concertId}`);
       } else {
-        // Phone not found — ask them to pick a username
+        // Not found — ask them to pick a username
         setStep("username");
       }
     } catch {
+      // API unreachable (dev mode without DB) — still let them pick a username
       setStep("username");
     } finally {
       setLoading(false);
@@ -64,39 +65,58 @@ export default function UserOnboarding() {
   }
 
 
-  // ── Step 2: submit username (new user) ───────────────────
+  // ── Step 2: register a new user then log in ──────────────────────────────
   async function submitUsername(e) {
     e.preventDefault();
     setError("");
 
     if (!username.trim()) { setError("Username is required."); return; }
-    let res = await fetch('/api/user/register', {
-      method: "POST", body: JSON.stringify({
-        phoneNumber: phone,
-        concertId: searchParams.get("concertId"),
-        screenName: username
-      })
-    })
-    let res_json = await res.json()
-    if (!res_json.success) {
-      setError(res_json.error)
-      return
+    setLoading(true);
+
+    try {
+      // Register the new user
+      const regRes  = await fetch("/api/user/register", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          phoneNumber: phone.trim(),
+          screenName:  username.trim(),
+          concertId,
+        }),
+      });
+      const regData = await regRes.json();
+      if (!regData.success) {
+        setError(regData.error || "Registration failed. Try a different username.");
+        setLoading(false);
+        return;
+      }
+
+      // Now log them in (sets the session cookie)
+      const loginRes  = await fetch("/api/user/login", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ phoneNumber: phone.trim(), concertId }),
+      });
+      const loginData = await loginRes.json();
+
+      if (loginData.success) {
+        router.push(`/livefeed?concertId=${concertId}`);
+      } else {
+        setError("Registered but login failed. Try again.");
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    await fetch('/api/user/login', {
-      method: "POST", body: JSON.stringify({
-        phoneNumber: phone,
-        concertId: searchParams.get("concertId")
-      })
-    })
-    router.push("/livefeed");
   }
 
 
-  // ── Shared card wrapper (keeps the animated fade-in) ─────
+  // ── Shared animated card style ───────────────────────────────────────────
   const cardStyle = {
     ...styles.card,
-    opacity: visible ? 1 : 0,
-    transform: visible ? "translateY(0)" : "translateY(16px)",
+    opacity:    visible ? 1 : 0,
+    transform:  visible ? "translateY(0)" : "translateY(16px)",
     transition: "opacity 0.7s ease, transform 0.7s ease",
   };
 
@@ -108,8 +128,8 @@ export default function UserOnboarding() {
       <div style={styles.liveBadge}>LIVE</div>
       <p style={styles.tagline}>
         {step === "phone"
-          ? "Enter your number to join a live concert stream."
-          : "One more step — pick a username for the feed."}
+          ? "Enter your number to join the concert."
+          : "One more step — pick a username."}
       </p>
 
       <main style={cardStyle}>
@@ -117,11 +137,9 @@ export default function UserOnboarding() {
         <div style={styles.iconCircle}>
           <svg width="28" height="28" fill="none" stroke="#00d4ff" strokeWidth="1.8" viewBox="0 0 24 24">
             {step === "phone" ? (
-              // Phone icon
               <path strokeLinecap="round" strokeLinejoin="round"
                 d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24 11.47 11.47 0 003.58.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.45.57 3.57a1 1 0 01-.25 1.02l-2.2 2.2z" />
             ) : (
-              // Person icon
               <>
                 <circle cx="12" cy="8" r="4" />
                 <path strokeLinecap="round" d="M4 20c0-4 3.58-7 8-7s8 3 8 7" />
@@ -133,11 +151,11 @@ export default function UserOnboarding() {
         <h1 style={styles.title}>{step === "phone" ? "JOIN CONCERT" : "PICK A USERNAME"}</h1>
         <p style={styles.subtitle}>
           {step === "phone"
-            ? "We'll check if you're already registered."
-            : "Your phone number wasn't found. Choose a name to show up in the feed."}
+            ? "We'll check if you're already registered for this event."
+            : "Your number wasn't found. Choose a display name for the feed."}
         </p>
 
-        {/* ── Step 1 form ── */}
+        {/* ── Step 1 ── */}
         {step === "phone" && (
           <form onSubmit={submitPhone} style={styles.form}>
             <div style={styles.fieldWrap}>
@@ -151,13 +169,13 @@ export default function UserOnboarding() {
               />
               {error && <p style={styles.error}>{error}</p>}
             </div>
-            <button type="submit" style={styles.primaryBtn} disabled={loading}>
+            <button type="submit" style={{ ...styles.primaryBtn, opacity: loading ? 0.6 : 1 }} disabled={loading}>
               {loading ? "Checking..." : "Continue"}
             </button>
           </form>
         )}
 
-        {/* ── Step 2 form ── */}
+        {/* ── Step 2 ── */}
         {step === "username" && (
           <form onSubmit={submitUsername} style={styles.form}>
             <div style={styles.fieldWrap}>
@@ -171,11 +189,11 @@ export default function UserOnboarding() {
               />
               {error && <p style={styles.error}>{error}</p>}
             </div>
-            <button type="submit" style={styles.primaryBtn}>
-              Join Feed
+            <button type="submit" style={{ ...styles.primaryBtn, opacity: loading ? 0.6 : 1 }} disabled={loading}>
+              {loading ? "Joining..." : "Join Feed"}
             </button>
-            {/* Let them go back and fix their number */}
-            <button type="button" style={styles.backBtn} onClick={() => { setStep("phone"); setError(""); }}>
+            <button type="button" style={styles.backBtn}
+              onClick={() => { setStep("phone"); setError(""); }}>
               ← Use a different number
             </button>
           </form>
@@ -184,6 +202,15 @@ export default function UserOnboarding() {
 
       <p style={styles.footer}>Concert Companion — Live Concert Platform</p>
     </div>
+  );
+}
+
+// ── Suspense wrapper required by Next.js for useSearchParams ────────────────
+export default function UserOnboarding() {
+  return (
+    <Suspense>
+      <UserOnboardingInner />
+    </Suspense>
   );
 }
 

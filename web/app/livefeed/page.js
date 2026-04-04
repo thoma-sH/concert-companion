@@ -1,7 +1,25 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Script from "next/script";
+
+// ── Map a DB chat row to the post shape used in the feed ───────────────────
+function dbRowToPost(row) {
+  return {
+    id:          row.idChatMessage,
+    username:    row.Username || "anonymous",
+    timestamp:   new Date(row.Sent).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    text:        row.Message || "",
+    likes:       row.UpvoteCount || 0,
+    liked:       row.hasUpvoted === 1,
+    isNew:       false,
+    isReport:    row.Type === 2,
+    isAdmin:     row.Type === 3,
+    reportCount: 1,
+    pinned:      false,
+  };
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const COLORS = [
@@ -54,7 +72,10 @@ const SEED_POSTS = [
 ];
 
 // ── Component ────────────────────────────────────────────────────────────────
-export default function ConcertCompanion() {
+function ConcertCompanionInner() {
+  const searchParams = useSearchParams();
+  const concertId    = searchParams.get("concertId");
+
   const [posts,          setPosts]         = useState(SEED_POSTS);
   const [adminNotes,     setAdminNotes]    = useState([]);
   const [composeOpen,    setComposeOpen]   = useState(false);
@@ -65,6 +86,10 @@ export default function ConcertCompanion() {
   const [lightBg,        setLightBg]       = useState("");
   const [messageInput,   setMessageInput]  = useState("");
   const [reportInput,    setReportInput]   = useState("");
+  const [currentUser,    setCurrentUser]   = useState("you");
+  const [currentUserId,  setCurrentUserId] = useState(null);
+  const [concertName,    setConcertName]   = useState("Concert");
+  const [attendeeCount,  setAttendeeCount] = useState(null);
 
   const nextId        = useRef(10);
   const reportBuckets = useRef([]);
@@ -86,6 +111,55 @@ export default function ConcertCompanion() {
       })),
     []
   );
+
+  // ── Load user session (set by /api/user/login cookie + localStorage) ────
+  useEffect(() => {
+    // Username is stored in localStorage by the onboarding page
+    try {
+      const stored = localStorage.getItem("concert_user");
+      if (stored) {
+        const u = JSON.parse(stored);
+        setCurrentUser(u.username || "you");
+        setCurrentUserId(u.userId || null);
+      }
+    } catch {}
+  }, []);
+
+  // ── Fetch concert info (name) once on mount ───────────────────────────────
+  useEffect(() => {
+    if (!concertId) return;
+    fetch(`/api/concert/${concertId}`)
+      .then(r => r.json())
+      .then(data => { if (data.success) setConcertName(data.ConcertName); })
+      .catch(() => {});
+  }, [concertId]);
+
+  // ── Poll real messages from the DB every 5 seconds ───────────────────────
+  const pollMessages = useCallback(async () => {
+    if (!concertId) return;
+    try {
+      const res  = await fetch(`/api/chat/get?concertId=${concertId}`);
+      const data = await res.json();
+      if (!data.success) return;
+      // Update attendee count from DB response
+      setAttendeeCount(data.count ?? null);
+      // Replace the feed with real DB rows (keeps local optimistic posts on top)
+      setPosts(prev => {
+        const dbPosts   = data.data.map(dbRowToPost).reverse(); // newest first
+        const localOnly = prev.filter(p => p.id >= 1000);       // optimistic local posts
+        // Merge: local-only posts stay on top, db posts fill the rest
+        const dbIds = new Set(dbPosts.map(p => p.id));
+        const merged = [...localOnly.filter(p => !dbIds.has(p.id)), ...dbPosts];
+        return merged;
+      });
+    } catch {}
+  }, [concertId]);
+
+  useEffect(() => {
+    pollMessages();
+    const tick = setInterval(pollMessages, 5000);
+    return () => clearInterval(tick);
+  }, [pollMessages]);
 
   // ── Admin notes (localStorage) ──────────────────────────────────────────
   const loadAdminNotes = useCallback(() => {
@@ -189,7 +263,7 @@ export default function ConcertCompanion() {
     setPosts((prev) => [
       {
         id,
-        username:    "you",
+        username:    currentUser,
         timestamp:   "just now",
         likes:       0,
         liked:       false,
@@ -222,7 +296,7 @@ export default function ConcertCompanion() {
       setPosts((prev) => [
         {
           id,
-          username:    "you",
+          username:    currentUser,
           timestamp:   "just now",
           text,
           likes:       0,
@@ -244,20 +318,37 @@ export default function ConcertCompanion() {
   function closeCompose() { setComposeOpen(false); setGifPickerOpen(false); }
   function closeReport()  { setReportOpen(false); }
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = messageInput.trim();
     if (!text) return;
+    // Optimistic UI — show immediately
     addPost({ text });
     setMessageInput("");
     closeCompose();
+    // Persist to DB (fire-and-forget; next poll will confirm)
+    if (concertId) {
+      fetch("/api/chat/post", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ concertId, messageData: text, messageType: "message" }),
+      }).catch(() => {});
+    }
   }
 
-  function sendReport() {
+  async function sendReport() {
     const text = reportInput.trim();
     if (!text) return;
     submitReport(text);
     setReportInput("");
     closeReport();
+    // Persist report to DB
+    if (concertId) {
+      fetch("/api/chat/post", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ concertId, messageData: text, messageType: "report" }),
+      }).catch(() => {});
+    }
   }
 
   function postGif(src) {
@@ -333,12 +424,14 @@ export default function ConcertCompanion() {
           <div className="header-top">
             <div>
               <div className="attendee-pill">
-                <span>Kendrick Lamar</span>
+                <span>{concertName}</span>
               </div>
               <div className="live-row">
                 <span className="live-dot" />
                 <span className="live-text">LIVE</span>
-                <span className="attendee-count">3,187 here</span>
+                {attendeeCount !== null && (
+                  <span className="attendee-count">{attendeeCount.toLocaleString()} here</span>
+                )}
               </div>
             </div>
             <h1 className="festival-name">Concert Companion</h1>
@@ -600,6 +693,11 @@ export default function ConcertCompanion() {
       </div>
     </>
   );
+}
+
+// Suspense is required by Next.js when using useSearchParams in a client component
+export default function ConcertCompanion() {
+  return <Suspense><ConcertCompanionInner /></Suspense>;
 }
 
 // ── All styles (faithful port of styles.css) ─────────────────────────────────
