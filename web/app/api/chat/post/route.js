@@ -24,6 +24,7 @@ export async function POST(request) {
         console.log(bannedResponse)
         if (bannedResponse[0][0]["Banned"] !== null) return NextResponse.json({ "sucess": false, "error": "You have been banned from chatting" })
     }
+    console.log([messageData, userId ? userId : null, concertId, messageTypes[messageType]])
     await pool.execute("INSERT INTO ChatMessage (Message, idUser, idConcert, Sent, Type) VALUES (?,?,?,NOW(),?)", [messageData, userId ? userId : null, concertId, messageTypes[messageType]])
     return NextResponse.json({ "success": true })
 }

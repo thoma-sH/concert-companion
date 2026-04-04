@@ -23,7 +23,7 @@ export async function GET(request) {
     FROM concert_companion.ChatMessage AS cm 
     LEFT JOIN concert_companion.User AS u ON cm.idUser = u.idUser 
     LEFT JOIN concert_companion.Upvotes AS up ON cm.idChatMessage = up.idChatMessage 
-    WHERE cm.idConcert = ?  AND (cm.Type < 10)
+    WHERE cm.idConcert = ? 
     GROUP BY 
         cm.idUser, 
         cm.Type, 
