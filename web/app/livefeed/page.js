@@ -634,6 +634,7 @@ const STYLES = `
     flex-direction: column;
     background: var(--bg);
     position: relative;
+    margin: 0 auto;
   }
 
   /* ── Header ── */
