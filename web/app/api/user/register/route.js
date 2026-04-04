@@ -9,7 +9,7 @@ export async function POST(request) {
     if (existing_users[0].length != 0) {
         return NextResponse.json({ "success": false, "error": "this email already exists" }, { status: 200 })
     }
-    let existing_name = await pool.execute("SELECT ScreenName FROM User WHERE ScreenName = ? and idConcert = ? LIMIT 1", [phoneNumber, concertId])
+    let existing_name = await pool.execute("SELECT ScreenName FROM User WHERE ScreenName = ? and idConcert = ? LIMIT 1", [screenName, concertId])
     if (existing_name[0].length != 0) {
         return NextResponse.json({ "success": false, "error": "this screen Name already exists" }, { status: 200 })
     }

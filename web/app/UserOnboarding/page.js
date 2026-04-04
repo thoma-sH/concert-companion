@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // Step 1 — user enters their phone number
 // Step 2 — only shown if the phone is NOT in the DB, asks for a username
@@ -13,12 +13,12 @@ export default function UserOnboarding() {
   // "phone" = step 1, "username" = step 2
   const [step, setStep] = useState("phone");
 
-  const [phone,    setPhone]    = useState("");
+  const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
-  const [error,    setError]    = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const [visible,  setVisible]  = useState(false);
-
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const searchParams = useSearchParams()
   // Fade the card in on load
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 50);
@@ -41,19 +41,21 @@ export default function UserOnboarding() {
     setLoading(true);
     try {
       // Ask the API: does this phone already have a username in the DB?
-      const res  = await fetch(`/api/check-phone?phone=${encodeURIComponent(phone.trim())}`);
+      const res = await fetch('/api/user/login', {
+        method: "POST", body: JSON.stringify({
+          phoneNumber: phone,
+          concertId: searchParams.get("concertId")
+        })
+      })
       const data = await res.json();
-
-      if (data.username) {
+      if (data.success) {
         // Phone found — save and go straight to the feed
-        localStorage.setItem("concert_user", JSON.stringify({ username: data.username, phone: phone.trim() }));
         router.push("/livefeed");
       } else {
         // Phone not found — ask them to pick a username
         setStep("username");
       }
     } catch {
-      // API not built yet — fall through to username step so the app stays usable
       setStep("username");
     } finally {
       setLoading(false);
@@ -62,14 +64,29 @@ export default function UserOnboarding() {
 
 
   // ── Step 2: submit username (new user) ───────────────────
-  function submitUsername(e) {
+  async function submitUsername(e) {
     e.preventDefault();
     setError("");
 
     if (!username.trim()) { setError("Username is required."); return; }
-
-    // Save both to localStorage and head to the feed
-    localStorage.setItem("concert_user", JSON.stringify({ username: username.trim(), phone: phone.trim() }));
+    let res = await fetch('/api/user/register', {
+      method: "POST", body: JSON.stringify({
+        phoneNumber: phone,
+        concertId: searchParams.get("concertId"),
+        screenName: username
+      })
+    })
+    let res_json = await res.json()
+    if (!res_json.success) {
+      setError(res_json.error)
+      return
+    }
+    await fetch('/api/user/login', {
+      method: "POST", body: JSON.stringify({
+        phoneNumber: phone,
+        concertId: searchParams.get("concertId")
+      })
+    })
     router.push("/livefeed");
   }
 
@@ -77,7 +94,7 @@ export default function UserOnboarding() {
   // ── Shared card wrapper (keeps the animated fade-in) ─────
   const cardStyle = {
     ...styles.card,
-    opacity:   visible ? 1 : 0,
+    opacity: visible ? 1 : 0,
     transform: visible ? "translateY(0)" : "translateY(16px)",
     transition: "opacity 0.7s ease, transform 0.7s ease",
   };

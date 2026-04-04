@@ -11,15 +11,17 @@ export async function POST(request) {
 
         const res = await request.json()
         const { phoneNumber, concertId } = res
+        console.log([phoneNumber, concertId])
 
         const rows = await pool.execute(
             'SELECT idUser, idConcert FROM User WHERE PhoneNumber = ? and idConcert = ?',
             [phoneNumber, concertId]
         );
-
-        const user = rows[0];
+        console.log(rows)
+        if (rows[0].length == 0) return NextResponse.json({ success: false, error: "that number is not registered" })
+        const user = rows[0][0];
         console.log(user)
-        const token = await new SignJWT({ userId: user[0].idUser, concertId: user[0].idConcert, type: "user" })
+        const token = await new SignJWT({ userId: user.idUser, concertId: user.idConcert, type: "user" })
             .setProtectedHeader({ alg: 'HS256' })
             .sign(SECRET);
 
