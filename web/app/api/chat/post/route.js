@@ -16,7 +16,7 @@ export async function POST(request) {
     let { concertId, messageData, messageType } = await request.json()
     let venueId = await getVenue(request);
     let { userId, UserConcertId } = await getUser(request);
-    if (!venueId && (!userId || !UserConcertId != concertId) || (messageType == "announcement" && !venueId)) {
+    if ((!venueId && (!userId || !UserConcertId != concertId)) || (messageType == "announcement" && !venueId)) {
         return NextResponse.json({ "success": false, "error": "unauthorized" }, { status: 200 })
     }
     if (userId) {
