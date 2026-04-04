@@ -161,7 +161,7 @@ export default function ManagePage() {
     return () => stopLocalPreview();
   }, [stopLocalPreview]);
 
-  // ─── Fetch chat messages ────────────────────────────────────────────────
+  //  Fetch chat messages 
   function fetchMessages() {
     if (!concertId) return;
     fetch("/api/chat/get?concertId=" + concertId)
@@ -187,7 +187,7 @@ export default function ManagePage() {
     return () => clearInterval(interval);
   }, [concertId]);
 
-  // ─── Chat & report helpers ──────────────────────────────────────────────
+  //  Chat & report helpers 
   function handleDeleteMessage(id) {
     fetch("/api/chat/delete", { method: "POST", body: JSON.stringify({ chatId: id }) });
   }
@@ -202,7 +202,7 @@ export default function ManagePage() {
     setNewMessage("");
   }
 
-  // ─── QR code helpers ───────────────────────────────────────────────────
+  //  QR code helpers 
   const handleCopyLink = async () => {
     try { await navigator.clipboard.writeText(qrUrl); }
     catch {

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Script from "next/script";
 import { useSearchParams } from "next/navigation";
 
-// ── Constants ──────────────────────────────────────────────────────────────
+//  Constants 
 const COLORS = [
   "#007EA7", "#2A9D8F", "#005F7F", "#4db8aa",
   "#FF331F", "#cc2010", "#ff6652",
@@ -23,7 +23,7 @@ const SIMILARITY_THRESHOLD = 0.60;
 const ADMIN_NOTES_KEY = "admin_notes";
 const ADMIN_NOTE_DURATION = 10 * 60 * 1000;
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+//  Helpers 
 function tokenize(str) {
   return str
     .toLowerCase()
@@ -73,7 +73,7 @@ function hslToRgb(h, s, l) {
   return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+//  Component 
 export default function ConcertCompanion() {
   const [posts, setPosts] = useState([]);
   const [adminNotes, setAdminNotes] = useState([]);
@@ -102,7 +102,7 @@ export default function ConcertCompanion() {
   const rptRef = useRef(null);
   const searchParams = useSearchParams();
 
-  // ── Fetch messages ─────────────────────────────────────────────────────
+  //  Fetch messages 
   function fetchMessages() {
     const concertId = searchParams.get("concertId");
     if (!concertId) return;
@@ -124,7 +124,7 @@ export default function ConcertCompanion() {
     return () => clearInterval(interval);
   }, [searchParams]);
 
-  // ── Visualizer bars ─────────────────────────────────────────────────────
+  //  Visualizer bars 
   const visBars = useMemo(
     () =>
       Array.from({ length: 28 }, (_, i) => ({
@@ -137,14 +137,14 @@ export default function ConcertCompanion() {
     []
   );
 
-  // ── Auto-focus inputs ───────────────────────────────────────────────────
+  //  Auto-focus inputs 
   useEffect(() => { if (composeOpen) setTimeout(() => msgRef.current?.focus(), 50); }, [composeOpen]);
   useEffect(() => { if (reportOpen) setTimeout(() => rptRef.current?.focus(), 50); }, [reportOpen]);
 
-  // ── ID generator (for optimistic updates, optional) ─────────────────────
+  //  ID generator (for optimistic updates, optional) 
   function uid() { return nextId.current++; }
 
-  // ── Expire NEW badge after 10 s ─────────────────────────────────────────
+  //  Expire NEW badge after 10 s 
   function expireBadge(id) {
     setTimeout(
       () => setPosts((p) => p.map((x) => (x.id === id ? { ...x, isNew: false } : x))),
@@ -152,7 +152,7 @@ export default function ConcertCompanion() {
     );
   }
 
-  // ── Like toggle ─────────────────────────────────────────────────────────
+  //  Like toggle 
   function toggleLike(postId) {
     const post = posts.find(p => p.idChatMessage == postId);
     if (!post) return;
@@ -171,7 +171,7 @@ export default function ConcertCompanion() {
     }
   }
 
-  // ── Report ──────────────────────────────────────────────────────────────
+  //  Report 
   function submitReport(text) {
     fetch("/api/chat/post", {
       method: "POST",
@@ -184,7 +184,7 @@ export default function ConcertCompanion() {
     }).catch(err => console.error("Report send error:", err));
   }
 
-  // ── Compose / report helpers ────────────────────────────────────────────
+  //  Compose / report helpers 
   function closeCompose() {
     setComposeOpen(false);
     setGifPickerOpen(false);
@@ -256,7 +256,7 @@ export default function ConcertCompanion() {
     closeReport();
   }
 
-  // ── GIF picker ──────────────────────────────────────────────────────────
+  //  GIF picker 
   async function postGif(src) {
     try {
       const res = await fetch("/api/chat/post", {
@@ -275,7 +275,7 @@ export default function ConcertCompanion() {
     }
   }
 
-  // ── Camera with preview ─────────────────────────────────────────────────
+  //  Camera with preview 
   async function openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -319,7 +319,7 @@ export default function ConcertCompanion() {
     setComposeOpen(true);
   }
 
-  // ── Light show with breath/rainbow animation ────────────────────────────
+  //  Light show with breath/rainbow animation 
   function pollLightState() {
     const concertId = searchParams.get("concertId");
     if (!concertId) return;
@@ -386,13 +386,13 @@ export default function ConcertCompanion() {
     }
   }
 
-  // ── Sort posts ──────────────────────────────────────────────────────────
+  //  Sort posts 
   const sortedPosts = useMemo(
     () => [...posts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)),
     [posts]
   );
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  //  Render 
   return (
     <>
       <style>{STYLES}</style>
@@ -645,7 +645,7 @@ export default function ConcertCompanion() {
   );
 }
 
-// ── All styles (unchanged, includes photo preview styles) ─────────────────
+//  All styles (unchanged, includes photo preview styles) 
 const STYLES = `
   :root {
     --bg:          #0a0a12;
