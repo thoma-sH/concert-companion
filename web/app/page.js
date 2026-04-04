@@ -68,7 +68,7 @@ export default function Home() {
         // Fallback: just navigate after a short demo delay
         setTimeout(() => {
           stopScan();
-          router.push("/livefeed");
+          router.push("/UserOnboarding");
         }, 3000);
       }
     };

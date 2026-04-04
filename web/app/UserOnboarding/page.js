@@ -32,6 +32,7 @@ export default function UserOnboarding() {
     setError("");
 
     // Basic format check before hitting the API
+    
     if (!phone.trim()) { setError("Phone number is required."); return; }
     if (!/^\+?[\d\s\-().]{7,15}$/.test(phone.trim())) {
       setError("Enter a valid phone number.");
