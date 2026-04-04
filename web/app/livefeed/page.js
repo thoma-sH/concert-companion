@@ -259,17 +259,18 @@ export default function ConcertCompanion() {
   // ── Light show ──────────────────────────────────────────────────────────
   function openLightShow() {
     setLightshowOpen(true);
-    setLightBg(randColor(LIGHT_SHOW_COLORS));
     const concertId = searchParams.get("concertId");
     lightInterval.current = setInterval(async () => {
       try {
         const resp = await fetch("/api/concertColor?concertId=" + concertId);
         const json_resp = await resp.json();
         if (json_resp.success) {
-          let r = (color_code >> 16) & 0xFF;
-          let g = (color_code >> 8) & 0xFF;
-          let b = color_code & 0xFF;
+          let r = (json_resp.color >> 16) & 0xFF;
+          let g = (json_resp.color >> 8) & 0xFF;
+          let b = json_resp.color & 0xFF;
           let cssColor = `rgb(${r}, ${g}, ${b})`;
+          setLightBg(cssColor);
+
         }
       } catch (e) {
         console.error("Light show fetch error:", e);

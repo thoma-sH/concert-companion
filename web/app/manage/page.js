@@ -313,7 +313,7 @@ export default function ManagePage() {
             </div>
 
             {/* Effects card */}
-            <div className="bg-[#0a1f3d]/60 rounded-2xl p-4 border border-[#38b6ff]/20 space-y-3">
+            {/* <div className="bg-[#0a1f3d]/60 rounded-2xl p-4 border border-[#38b6ff]/20 space-y-3">
               <h3 className="text-sm font-semibold text-[#b0d4ff] uppercase tracking-wider">Effects</h3>
               <div className="grid grid-cols-2 gap-2">
                 {effects.map((effect) => (
@@ -339,7 +339,7 @@ export default function ManagePage() {
                   </button>
                 </>
               )}
-            </div>
+            </div> */}
           </div>
         )}
 
