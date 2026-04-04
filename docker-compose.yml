@@ -1,0 +1,17 @@
+services:
+  mysql-db:
+    image: mysql:8.0.44
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password123!
+      MYSQL_DATABASE: concert_companion
+      MYSQL_USER: companion
+      MYSQL_PASSWORD: password123!
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
