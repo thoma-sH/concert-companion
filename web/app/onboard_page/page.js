@@ -16,7 +16,7 @@ export default function OnboardPage() {
   // Dev login - instant redirect, no loading
   const handleDevLogin = () => {
     localStorage.setItem("dev_user", JSON.stringify({ id: "dev123", email: "dev@test.com", name: "Developer" }));
-    router.push("/dashboard");
+    router.push("/UserOnboarding");
   };
 
   const handleSubmit = async (e) => {
@@ -59,7 +59,7 @@ export default function OnboardPage() {
         "user",
         JSON.stringify({ id: "user_" + Date.now(), email: email, name: email.split("@")[0] })
       );
-      router.push("/dashboard");
+      router.push("/UserOnboarding");
     } catch (err) {
       setError("Something went wrong. Try again.");
       setLoading(false);
