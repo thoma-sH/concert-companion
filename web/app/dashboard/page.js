@@ -126,7 +126,7 @@ export default function Dashboard() {
           ) : (
             concerts.map((concert) => (
               <div
-                key={concert.concertId}
+                key={concert.idConcert}
                 className="bg-[#0a1f3d]/40 backdrop-blur-sm rounded-xl p-4 border border-[#38b6ff]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
               >
                 <div>
