@@ -13,16 +13,8 @@ export default function OnboardPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-<<<<<<< HEAD
 
-  // Dev login - instant redirect, no loading
-  const handleDevLogin = () => {
-    localStorage.setItem("dev_user", JSON.stringify({ id: "dev123", email: "dev@test.com", name: "Developer" }));
-    router.push("/UserOnboarding");
-  };
-=======
   const [success, setSuccess] = useState(false);
->>>>>>> dbf0526 (start on backend)
 
   const handleSubmit = async (e) => {
     e.preventDefault();
