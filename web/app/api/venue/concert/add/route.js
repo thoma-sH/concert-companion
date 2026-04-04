@@ -6,6 +6,6 @@ export async function POST(request) {
     if (!venueId) return NextResponse.json({ "success": false, "error": "unauthorized" }, { status: 400 })
     let { concertName, startDate, endDate } = await request.json()
     console.log([concertName, startDate, endDate, venueId])
-    await pool.execute("INSERT INTO  Concert (ConcertName, StartDate, EndDate, idVenue) VALUES (?, ?, ?, ?)", [concertName, startDate, endDate, venueId]);
+    await pool.execute("INSERT INTO Concert (ConcertName, StartDate, EndDate, idVenue) VALUES (?, ?, ?, ?)", [concertName, startDate, endDate, venueId]);
     return NextResponse.json({ "success": true });
 }

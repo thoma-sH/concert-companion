@@ -13,8 +13,8 @@ export default function OnboardPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const [success, setSuccess] = useState(false);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,21 +45,39 @@ export default function OnboardPage() {
         return;
       }
     }
-
-    // For demo: store user and redirect
-    // In real app, replace with your actual auth call (e.g., Firebase, NextAuth)
-    try {
-      // Simulate network delay (optional, remove if you want instant)
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ id: "user_" + Date.now(), email: email, name: email.split("@")[0] })
-      );
-      router.push("/UserOnboarding");
-    } catch (err) {
-      setError("Something went wrong. Try again.");
-      setLoading(false);
+    if (activeTab == "signup") {
+      let response = await fetch('/api/venue/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          venueName: venueName
+        })
+      })
+      let json_response = await response.json()
+      if (!json_response.success) {
+        setError(json_response.error)
+        setLoading(false)
+      } else {
+        setError("")
+        setSuccess(true)
+        setLoading(false)
+      }
+    } else {
+      let response = await fetch('/api/venue/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: email,
+          password: password,
+        })
+      })
+      let json_response = await response.json()
+      if (!json_response.success) {
+        setError(json_response.error)
+        setLoading(false)
+      } else {
+        router.push("/dashboard")
+      }
     }
   };
 

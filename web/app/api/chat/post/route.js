@@ -19,8 +19,9 @@ export async function POST(request) {
         return NextResponse.json({ "success": false, "error": "unauthorized" }, { status: 200 })
     }
     if (userId) {
-        let bannedResponse = await pool.execute("SELECT Banned from User WHERE idUser = ?", userId)
-        if (bannedResponse[0][0] !== 0) return NextResponse.json({ "sucess": false, "error": "You have been banned from chatting" })
+        let bannedResponse = await pool.execute("SELECT Banned from User WHERE idUser = ?", [userId])
+        console.log(bannedResponse)
+        if (bannedResponse[0][0]["Banned"] !== null) return NextResponse.json({ "sucess": false, "error": "You have been banned from chatting" })
     }
     await pool.execute("INSERT INTO ChatMessage (Message, idUser, idConcert, Sent, Type) VALUES (?,?,?,NOW(),?)", [messageData, userId ? userId : null, concertId, messageTypes[messageType]])
     return NextResponse.json({ "success": true })
