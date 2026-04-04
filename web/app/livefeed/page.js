@@ -72,7 +72,10 @@ function hslToRgb(h, s, l) {
   return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
 }
 
-export default function ConcertCompanion() {
+export default function Page() {
+  return (<Suspense fallback={<div>loading</div>}><ConcertCompanion /></Suspense>)
+}
+function ConcertCompanion() {
   const [posts, setPosts] = useState([]);
   const [adminNotes, setAdminNotes] = useState([]);
   const [composeOpen, setComposeOpen] = useState(false);
