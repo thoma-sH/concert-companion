@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
 
@@ -84,108 +84,125 @@ export default function ManagePage() {
   const [activeEffect, setActiveEffect] = useState(null);
   const [previewColor, setPreviewColor] = useState("#38b6ff");
   const [effectSpeed, setEffectSpeed] = useState(1.0);
-  const effectRef = useRef(null);
-  const sendTimeout = useRef(null);
 
-  function fetchMessages() {
-    fetch("/api/chat/get?concertId=" + concertId).then(async (response) => {
-      let json_response = await response.json();
-      if (json_response.success) setMessages(json_response.data);
-    });
-  }
+  // Local animation preview (only for the manage screen, not broadcast)
+  const previewIntervalRef = useRef(null);
 
-  useEffect(() => {
-    if (!concertId) return;
-    fetch("/api/venue/concert/list")
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.data) {
-          const found = json.data.find((c) => String(c.idConcert) === String(concertId));
-          setConcert(found || null);
-        }
-      });
-    setQrUrl(`${window.location.origin}/UserOnboarding?concertId=${concertId}`);
-    setInterval(fetchMessages, 250);
-  }, [concertId]);
-
-  // ─── Direct send: no debounce. Used inside effect intervals which are
-  //     already rate-limited by their own setInterval cadence.
-  function sendColorNow(cssColor) {
-    if (!concertId) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1;
-    canvas.height = 1;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = cssColor;
-    ctx.fillRect(0, 0, 1, 1);
-    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-    const colorInt = (r << 16) | (g << 8) | b;
-    fetch("/api/venue/concert/setcolor", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ concertId, color: colorInt }),
-    });
-  }
-
-  // ─── Debounced send: used for slider/picker interactions so we don't
-  //     flood the server on every pixel of drag movement.
-  function pushColorToServer(cssColor) {
-    if (!concertId) return;
-    if (sendTimeout.current) clearTimeout(sendTimeout.current);
-    sendTimeout.current = setTimeout(() => sendColorNow(cssColor), 100);
-  }
-
-  function applyBrightness(hex, percent) {
+  // Helper: apply brightness to a hex color and return CSS rgb
+  function applyBrightnessToHex(hex, percent) {
     if (!hex || hex === "#000000") return hex;
     const { r, g, b } = hexToRgbObj(hex);
     const f = Math.min(percent, 100) / 100;
     return `rgb(${Math.min(255, Math.floor(r * f))}, ${Math.min(255, Math.floor(g * f))}, ${Math.min(255, Math.floor(b * f))})`;
   }
 
-  const stopEffect = useCallback(() => {
-    if (effectRef.current) { clearInterval(effectRef.current); effectRef.current = null; }
-    setActiveEffect(null);
-    const color = applyBrightness(baseColor, brightness);
-    setPreviewColor(color);
-    pushColorToServer(color);
-  }, [baseColor, brightness, concertId]);
+  // Update the shared state (effect + color) via API
+  const updateSharedState = useCallback(async (effect, color) => {
+    if (!concertId) return;
+    try {
+      await fetch("/api/concertState", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concertId, effect, color }),
+      });
+    } catch (err) {
+      console.error("Failed to update concert state:", err);
+    }
+  }, [concertId]);
 
-  const startEffect = useCallback((type) => {
-    if (effectRef.current) { clearInterval(effectRef.current); effectRef.current = null; }
-    setActiveEffect(type);
+  // Stop any local preview animation
+  const stopLocalPreview = useCallback(() => {
+    if (previewIntervalRef.current) {
+      clearInterval(previewIntervalRef.current);
+      previewIntervalRef.current = null;
+    }
+  }, []);
+
+  // Start local preview animation (for the manage screen's own display)
+  const startLocalPreview = useCallback((type) => {
+    stopLocalPreview();
     const { r, g, b } = hexToRgbObj(baseColor);
+    const brightnessFactor = brightness / 100;
 
     if (type === "breath") {
       let step = 0;
-      effectRef.current = setInterval(() => {
+      previewIntervalRef.current = setInterval(() => {
         const intensity = (Math.sin(step * 0.2 * effectSpeed) + 1) / 2;
-        const f = (0.1 + intensity * 0.9) * (brightness / 100);
+        const f = (0.1 + intensity * 0.9) * brightnessFactor;
         const color = `rgb(${Math.min(255, Math.floor(r * f))}, ${Math.min(255, Math.floor(g * f))}, ${Math.min(255, Math.floor(b * f))})`;
         setPreviewColor(color);
-        sendColorNow(color); // ← direct send: interval is 100ms so debounce would swallow every update
         step++;
       }, 100);
     } else if (type === "rainbow") {
       let hue = 0;
-      effectRef.current = setInterval(() => {
+      previewIntervalRef.current = setInterval(() => {
         const color = `hsl(${hue}, 100%, 50%)`;
         setPreviewColor(color);
-        sendColorNow(color); // ← direct send: interval is 80ms so debounce would swallow every update
         hue = (hue + 4 * effectSpeed) % 360;
       }, 80);
     }
-  }, [baseColor, brightness, effectSpeed, concertId]);
+  }, [baseColor, brightness, effectSpeed, stopLocalPreview]);
+
+  // When effect or color changes, update shared state and local preview
+  useEffect(() => {
+    if (activeEffect) {
+      updateSharedState(activeEffect, baseColor);
+      startLocalPreview(activeEffect);
+    } else {
+      updateSharedState("solid", baseColor);
+      const solidColor = applyBrightnessToHex(baseColor, brightness);
+      setPreviewColor(solidColor);
+      stopLocalPreview();
+    }
+  }, [activeEffect, baseColor, brightness, effectSpeed, updateSharedState, startLocalPreview, stopLocalPreview]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => stopLocalPreview();
+  }, [stopLocalPreview]);
+
+  // ─── Fetch chat messages ────────────────────────────────────────────────
+  function fetchMessages() {
+    if (!concertId) return;
+    fetch("/api/chat/get?concertId=" + concertId)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setMessages(data.data);
+      });
+  }
 
   useEffect(() => {
-    if (activeEffect) startEffect(activeEffect);
-    else {
-      const color = applyBrightness(baseColor, brightness);
-      setPreviewColor(color);
-      pushColorToServer(color); // ← debounced: triggered by slider/picker drag
-    }
-    return () => { if (effectRef.current) clearInterval(effectRef.current); };
-  }, [baseColor, brightness, effectSpeed]);
+    if (!concertId) return;
+    fetch("/api/venue/concert/list")
+      .then(r => r.json())
+      .then(json => {
+        if (json.data) {
+          const found = json.data.find(c => String(c.idConcert) === String(concertId));
+          setConcert(found || null);
+        }
+      });
+    setQrUrl(`${window.location.origin}/UserOnboarding?concertId=${concertId}`);
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 250);
+    return () => clearInterval(interval);
+  }, [concertId]);
 
+  // ─── Chat & report helpers ──────────────────────────────────────────────
+  function handleDeleteMessage(id) {
+    fetch("/api/chat/delete", { method: "POST", body: JSON.stringify({ chatId: id }) });
+  }
+
+  function sendMessage() {
+    if (!newMessage.trim()) return;
+    fetch("/api/chat/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ concertId, messageData: newMessage, messageType: "announcement" }),
+    });
+    setNewMessage("");
+  }
+
+  // ─── QR code helpers ───────────────────────────────────────────────────
   const handleCopyLink = async () => {
     try { await navigator.clipboard.writeText(qrUrl); }
     catch {
@@ -223,16 +240,6 @@ export default function ManagePage() {
     { name: "Telegram", color: "#2CA5E0", icon: <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" /></svg>, href: () => `https://t.me/share/url?url=${encodeURIComponent(qrUrl)}&text=${encodeURIComponent("Join my live concert! 🎵")}` },
   ];
 
-  function handleDeleteMessage(id) {
-    fetch("/api/chat/delete", { method: "POST", body: JSON.stringify({ chatId: id }) });
-  }
-
-  const sendMessage = () => {
-    if (!newMessage.trim()) return;
-    fetch("/api/chat/post", { method: "POST", body: JSON.stringify({ concertId, messageData: newMessage, messageType: "announcement" }) });
-    setNewMessage("");
-  };
-
   const presetColors = ["#ff0000", "#ff6600", "#ffff00", "#00ff00", "#00ffff", "#0066ff", "#ff00ff", "#ffffff"];
   const effects = ["breath", "rainbow"];
 
@@ -265,7 +272,6 @@ export default function ManagePage() {
 
         {activeTab === "lightsync" && (
           <div className="space-y-4">
-
             {/* Live preview */}
             <div className="rounded-2xl overflow-hidden border border-[#38b6ff]/20">
               <div className="w-full h-28 flex items-center justify-center"
@@ -283,17 +289,15 @@ export default function ManagePage() {
                 <p className="text-xs text-gray-500 mt-0.5">Tap a swatch or adjust RGB sliders</p>
               </div>
 
-              {/* Quick swatches */}
               <div className="grid grid-cols-8 gap-1.5">
                 {presetColors.map((c) => (
-                  <button key={c} onClick={() => { setBaseColor(c); if (activeEffect) stopEffect(); }}
+                  <button key={c} onClick={() => { setBaseColor(c); if (activeEffect) setActiveEffect(null); }}
                     className="w-full aspect-square rounded-full border-2 transition hover:scale-110 active:scale-95"
                     style={{ backgroundColor: c, borderColor: baseColor === c ? "white" : "transparent" }} />
                 ))}
               </div>
 
-              {/* RGB sliders */}
-              <RgbPicker color={baseColor} onChange={(hex) => { setBaseColor(hex); if (activeEffect) stopEffect(); }} />
+              <RgbPicker color={baseColor} onChange={(hex) => { setBaseColor(hex); if (activeEffect) setActiveEffect(null); }} />
             </div>
 
             {/* Brightness card */}
@@ -305,7 +309,7 @@ export default function ManagePage() {
               <div className="relative h-4 rounded-full cursor-pointer"
                 style={{ background: `linear-gradient(to right, #000, ${baseColor})` }}>
                 <input type="range" min="0" max="100" value={brightness}
-                  onChange={(e) => { setBrightness(parseInt(e.target.value)); if (activeEffect) stopEffect(); }}
+                  onChange={(e) => { setBrightness(parseInt(e.target.value)); if (activeEffect) setActiveEffect(null); }}
                   className="absolute inset-0 w-full opacity-0 cursor-pointer h-4" />
                 <div className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white border-2 border-[#38b6ff] shadow pointer-events-none"
                   style={{ left: `calc(${brightness}% - 10px)` }} />
@@ -313,11 +317,11 @@ export default function ManagePage() {
             </div>
 
             {/* Effects card */}
-            {/* <div className="bg-[#0a1f3d]/60 rounded-2xl p-4 border border-[#38b6ff]/20 space-y-3">
+            <div className="bg-[#0a1f3d]/60 rounded-2xl p-4 border border-[#38b6ff]/20 space-y-3">
               <h3 className="text-sm font-semibold text-[#b0d4ff] uppercase tracking-wider">Effects</h3>
               <div className="grid grid-cols-2 gap-2">
                 {effects.map((effect) => (
-                  <button key={effect} onClick={() => activeEffect === effect ? stopEffect() : startEffect(effect)}
+                  <button key={effect} onClick={() => setActiveEffect(activeEffect === effect ? null : effect)}
                     className={`py-3 rounded-xl text-sm font-semibold capitalize transition border ${activeEffect === effect ? "bg-[#38b6ff] text-[#050d1a] border-[#38b6ff]" : "bg-white/5 text-gray-300 border-white/10 hover:bg-white/10"}`}>
                     {activeEffect === effect ? "✓ " : ""}{effect}
                   </button>
@@ -334,12 +338,12 @@ export default function ManagePage() {
                       onChange={(e) => setEffectSpeed(parseFloat(e.target.value))}
                       className="w-full accent-[#38b6ff]" />
                   </div>
-                  <button onClick={stopEffect} className="w-full py-2 rounded-xl text-sm text-red-400 border border-red-500/30 hover:bg-red-500/10 transition">
+                  <button onClick={() => setActiveEffect(null)} className="w-full py-2 rounded-xl text-sm text-red-400 border border-red-500/30 hover:bg-red-500/10 transition">
                     Stop Effect
                   </button>
                 </>
               )}
-            </div> */}
+            </div>
           </div>
         )}
 

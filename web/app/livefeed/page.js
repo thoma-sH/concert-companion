@@ -85,9 +85,7 @@ export default function ConcertCompanion() {
   const [lightBg, setLightBg] = useState("");
   const [messageInput, setMessageInput] = useState("");
   const [reportInput, setReportInput] = useState("");
-  const [dismissedPins, setdismissedPins] = useState([]);
-  
-  // NEW: captured photo preview (base64 string or null)
+  const [dismissedPins, setDismissedPins] = useState([]);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
 
   // Light show state (from backend)
@@ -104,32 +102,27 @@ export default function ConcertCompanion() {
   const rptRef = useRef(null);
   const searchParams = useSearchParams();
 
-  // ── Fetch messages & admin notes ─────────────────────────────────────────
+  // ── Fetch messages ─────────────────────────────────────────────────────
   function fetchMessages() {
-    fetch("/api/chat/get?concertId=" + searchParams.get("concertId")).then(async (response) => {
-      let json_response = await response.json()
-      if (json_response.success) {
-        let newPosts = []
-        let newPinned = adminNotes
-        for (let x of json_response.data) {
-          if (x.Type > 10) {
-            if (!dismissedPins.includes(x.idChatMessage) && newPinned.filter((z) => z.idChatMessage == x.idChatMessage).length == 0) {
-              newPinned.push(x)
-            }
-          } else {
-            newPosts.push(x)
-          }
+    const concertId = searchParams.get("concertId");
+    if (!concertId) return;
+    fetch(`/api/chat/get?concertId=${concertId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.data)) {
+          setPosts(data.data);
+        } else {
+          console.error("Invalid messages response", data);
         }
-        setPosts(newPosts)
-        setAdminNotes(newPinned)
-      }
-    })
+      })
+      .catch(err => console.error("Fetch messages error:", err));
   }
 
   useEffect(() => {
-    const id = setInterval(fetchMessages, 500)
-    return () => clearInterval(id)
-  }, [dismissedPins, adminNotes])
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 500);
+    return () => clearInterval(interval);
+  }, [searchParams]);
 
   // ── Visualizer bars ─────────────────────────────────────────────────────
   const visBars = useMemo(
@@ -144,18 +137,11 @@ export default function ConcertCompanion() {
     []
   );
 
-  // ── Admin notes ─────────────────────────────────────────────────────────
-  function dismissAdminNote(id) {
-    console.log(id)
-    setAdminNotes(adminNotes.filter(n => n.idChatMessage != id))
-    setdismissedPins([...dismissedPins, id])
-  }
-
   // ── Auto-focus inputs ───────────────────────────────────────────────────
   useEffect(() => { if (composeOpen) setTimeout(() => msgRef.current?.focus(), 50); }, [composeOpen]);
   useEffect(() => { if (reportOpen) setTimeout(() => rptRef.current?.focus(), 50); }, [reportOpen]);
 
-  // ── ID generator ────────────────────────────────────────────────────────
+  // ── ID generator (for optimistic updates, optional) ─────────────────────
   function uid() { return nextId.current++; }
 
   // ── Expire NEW badge after 10 s ─────────────────────────────────────────
@@ -168,96 +154,97 @@ export default function ConcertCompanion() {
 
   // ── Like toggle ─────────────────────────────────────────────────────────
   function toggleLike(postId) {
-    if (posts.filter((p) => p.idChatMessage == postId)[0].hasUpvoted) {
+    const post = posts.find(p => p.idChatMessage == postId);
+    if (!post) return;
+    if (post.hasUpvoted) {
       fetch("/api/chat/unheart", {
-        method: "POST", body: JSON.stringify({ "messageId": postId })
-      })
+        method: "POST",
+        body: JSON.stringify({ messageId: postId }),
+        headers: { "Content-Type": "application/json" }
+      }).catch(err => console.error("Unheart error:", err));
     } else {
       fetch("/api/chat/heart", {
-        method: "POST", body: JSON.stringify({ "messageId": postId })
-      })
+        method: "POST",
+        body: JSON.stringify({ messageId: postId }),
+        headers: { "Content-Type": "application/json" }
+      }).catch(err => console.error("Heart error:", err));
     }
-  }
-
-  // ── Add post ────────────────────────────────────────────────────────────
-  function addPost(fields) {
-    const id = uid();
-    setPosts((prev) => [
-      {
-        id,
-        username: "you",
-        timestamp: "just now",
-        likes: 0,
-        liked: false,
-        isNew: true,
-        isReport: false,
-        isAdmin: false,
-        reportCount: 1,
-        pinned: false,
-        ...fields,
-      },
-      ...prev,
-    ]);
-    expireBadge(id);
   }
 
   // ── Report ──────────────────────────────────────────────────────────────
   function submitReport(text) {
     fetch("/api/chat/post", {
-      method: "POST", body: JSON.stringify({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         messageType: "report",
         concertId: searchParams.get("concertId"),
-        messageData: reportInput
+        messageData: text
       })
-    })
+    }).catch(err => console.error("Report send error:", err));
   }
 
   // ── Compose / report helpers ────────────────────────────────────────────
-  function closeCompose() { 
-    setComposeOpen(false); 
+  function closeCompose() {
+    setComposeOpen(false);
     setGifPickerOpen(false);
-    // Do NOT clear capturedPhoto here – it should stay if user reopens compose
   }
   function closeReport() { setReportOpen(false); }
 
   function sendMessage() {
-    // If there's a captured photo, send it first
     if (capturedPhoto) {
       sendPhoto();
       return;
     }
-    // Otherwise send text
     if (!messageInput.trim()) return;
-    fetch("/api/chat/post", {
-      method: "POST", body: JSON.stringify({
-        messageType: "message",
-        concertId: searchParams.get("concertId"),
-        messageData: messageInput
-      })
-    })
-    setMessageInput("");
-    closeCompose();
-  }
-
-  function sendPhoto() {
-    if (!capturedPhoto) return;
     fetch("/api/chat/post", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messageType: "image",
+        messageType: "message",
         concertId: searchParams.get("concertId"),
-        messageData: capturedPhoto
+        messageData: messageInput
       })
-    });
-    setCapturedPhoto(null);
+    }).catch(err => console.error("Send message error:", err));
     setMessageInput("");
     closeCompose();
   }
 
+  // PHOTO SENDING
+  function sendPhoto() {
+    if (!capturedPhoto) return;
+
+    const payload = {
+      messageType: "image", 
+      concertId: searchParams.get("concertId"),
+      messageData: capturedPhoto   // base64 JPEG
+    };
+
+    console.log("Sending photo, payload size:", capturedPhoto.length);
+
+    fetch("/api/chat/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(async res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        console.log("Photo send response:", data);
+        if (!data.success) throw new Error(data.error || "Unknown error");
+        // Success: clear photo and close composer
+        setCapturedPhoto(null);
+        setMessageInput("");
+        closeCompose();
+      })
+      .catch(err => {
+        console.error("Failed to send photo:", err);
+        alert("Could not send photo. Check console or backend.");
+      });
+  }
+
   function removePhoto() {
     setCapturedPhoto(null);
-    // Optionally focus text input again
     setTimeout(() => msgRef.current?.focus(), 50);
   }
 
@@ -271,19 +258,24 @@ export default function ConcertCompanion() {
 
   // ── GIF picker ──────────────────────────────────────────────────────────
   async function postGif(src) {
-    await fetch("/api/chat/post", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messageType: "gif",
-        concertId: searchParams.get("concertId"),
-        messageData: src
-      })
-    });
-    closeCompose();
+    try {
+      const res = await fetch("/api/chat/post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageType: "gif",
+          concertId: searchParams.get("concertId"),
+          messageData: src
+        })
+      });
+      if (!res.ok) throw new Error("GIF send failed");
+      closeCompose();
+    } catch (err) {
+      console.error("GIF error:", err);
+    }
   }
 
-  // ── Camera (fixed with preview) ─────────────────────────────────────────
+  // ── Camera with preview ─────────────────────────────────────────────────
   async function openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -304,7 +296,6 @@ export default function ConcertCompanion() {
     cameraStream.current = null;
   }
 
-  // Attach stream after video element appears
   useEffect(() => {
     if (cameraOpen && videoRef.current && cameraStream.current) {
       videoRef.current.srcObject = cameraStream.current;
@@ -323,13 +314,12 @@ export default function ConcertCompanion() {
     canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
     const photoData = canvas.toDataURL("image/jpeg");
-    setCapturedPhoto(photoData);   // store preview
-    closeCamera();                 // close camera overlay
-    // Reopen compose panel to show preview
+    setCapturedPhoto(photoData);
+    closeCamera();
     setComposeOpen(true);
   }
 
-  // ── Light show (with breath/rainbow animation) ──────────────────────────
+  // ── Light show with breath/rainbow animation ────────────────────────────
   function pollLightState() {
     const concertId = searchParams.get("concertId");
     if (!concertId) return;
@@ -396,7 +386,7 @@ export default function ConcertCompanion() {
     }
   }
 
-  // ── Sort: pinned reports float to top ───────────────────────────────────
+  // ── Sort posts ──────────────────────────────────────────────────────────
   const sortedPosts = useMemo(
     () => [...posts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)),
     [posts]
@@ -410,7 +400,7 @@ export default function ConcertCompanion() {
 
       <div className="app">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="header">
           <div className="header-top">
             <div>
@@ -426,12 +416,7 @@ export default function ConcertCompanion() {
             <h1 className="festival-name">Concert Companion</h1>
           </div>
 
-          {/* Visualizer */}
-          <div
-            className="visualizer"
-            style={{ cursor: "pointer" }}
-            onClick={openLightShow}
-          >
+          <div className="visualizer" style={{ cursor: "pointer" }} onClick={openLightShow}>
             {visBars.map((b) => (
               <div
                 key={b.id}
@@ -447,45 +432,16 @@ export default function ConcertCompanion() {
           </div>
         </div>
 
-        {/* ── Feed ── */}
+        {/* Feed */}
         <div className="feed">
-
-          {/* Admin notes slot */}
-          <div id="admin-notes-slot">
-            {adminNotes.map((note) => (
-              <div key={note.idChatMessage} className="post admin-post">
-                <div className="post-body">
-                  <div className="post-header">
-                    <span className="username">admin</span>
-                    <span className="timestamp">{note.Sent}</span>
-                    <span className="new-badge">PINNED</span>
-                  </div>
-                  <p className="post-text">{note.Message}</p>
-                  <div className="post-footer">
-                    <span className="admin-label">{note.Type == 20 ? "User Report" : "admin update"}</span>
-                    <button
-                      className="admin-dismiss-btn"
-                      onClick={() => dismissAdminNote(note.idChatMessage)}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Regular + report posts */}
           {sortedPosts.map((post) => (
             <div
-              key={post.id}
+              key={post.idChatMessage}
               className={[
                 "post",
                 post.Type == 20 ? "is-report" : "",
                 post.pinned ? "pinned" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              ].filter(Boolean).join(" ")}
             >
               <div className="post-body">
                 <div className="post-header">
@@ -528,9 +484,8 @@ export default function ConcertCompanion() {
           ))}
         </div>
 
-        {/* ── Bottom bar ── */}
+        {/* Bottom bar */}
         <div className="bottom-bar">
-          {/* Lights button — fixed to left edge */}
           <button className="lights-btn" onClick={openLightShow}>
             <span className="lights-btn__label">
               join the<br />
@@ -538,7 +493,6 @@ export default function ConcertCompanion() {
             </span>
           </button>
 
-          {/* Right cluster: compose + report */}
           <div className="smallContainer">
             <button
               className={`nav-btn nav-btn--center${composeOpen ? " open" : ""}`}
@@ -572,13 +526,9 @@ export default function ConcertCompanion() {
           </div>
         </div>
 
-        {/* ── Compose overlay (with photo preview) ── */}
+        {/* Compose overlay */}
         {composeOpen && (
-          <div
-            className="compose-overlay open"
-            onClick={closeCompose}
-          >
-            {/* GIF picker (only show if no photo preview) */}
+          <div className="compose-overlay open" onClick={closeCompose}>
             {gifPickerOpen && !capturedPhoto && (
               <div className="gif-picker open" onClick={(e) => e.stopPropagation()}>
                 <div className="gif-grid">
@@ -595,7 +545,6 @@ export default function ConcertCompanion() {
               </div>
             )}
 
-            {/* Compose panel */}
             <div className="compose-panel" onClick={(e) => e.stopPropagation()}>
               {!capturedPhoto ? (
                 <>
@@ -629,7 +578,6 @@ export default function ConcertCompanion() {
                   </button>
                 </>
               ) : (
-                // Photo preview with send/remove buttons
                 <div className="photo-preview-container">
                   <img src={capturedPhoto} alt="preview" className="photo-preview" />
                   <div className="photo-preview-buttons">
@@ -642,7 +590,7 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* ── Report overlay ── */}
+        {/* Report overlay */}
         {reportOpen && (
           <div className="report-overlay open" onClick={closeReport}>
             <div className="report-panel" onClick={(e) => e.stopPropagation()}>
@@ -662,7 +610,7 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* ── Camera overlay ── */}
+        {/* Camera overlay */}
         {cameraOpen && (
           <div className="camera-overlay open">
             <video ref={videoRef} autoPlay playsInline muted />
@@ -682,7 +630,7 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* ── Light show overlay ── */}
+        {/* Light show overlay */}
         {lightshowOpen && (
           <div
             className="lightshow-overlay open"
@@ -697,7 +645,7 @@ export default function ConcertCompanion() {
   );
 }
 
-// ── Styles (add photo preview styles at the end) ───────────────────────────
+// ── All styles (unchanged, includes photo preview styles) ─────────────────
 const STYLES = `
   :root {
     --bg:          #0a0a12;
@@ -727,7 +675,6 @@ const STYLES = `
     justify-content: center;
   }
 
-  /* ── App shell ── */
   .app {
     width: 100%;
     max-width: 400px;
@@ -739,7 +686,7 @@ const STYLES = `
     margin: 0 auto;
   }
 
-  /* ── Header ── */
+  /* Header */
   .header { padding: 20px 16px 0; background: var(--bg); }
   .header-top {
     display: flex;
@@ -775,7 +722,7 @@ const STYLES = `
     color: var(--accent-pale);
   }
 
-  /* ── Visualizer ── */
+  /* Visualizer */
   .visualizer { display: flex; align-items: flex-end; gap: 3px; padding: 0 2px; }
   .vis-bar {
     flex: 1;
@@ -785,7 +732,7 @@ const STYLES = `
   }
   @keyframes bounce { from { transform: scaleY(0.15); } to { transform: scaleY(1); } }
 
-  /* ── Feed ── */
+  /* Feed */
   .feed {
     flex: 1;
     padding: 12px;
@@ -796,7 +743,7 @@ const STYLES = `
     padding-bottom: 110px;
   }
 
-  /* ── Post cards ── */
+  /* Post cards */
   .post {
     background: var(--surface);
     border: 1px solid var(--surface-2);
@@ -856,32 +803,7 @@ const STYLES = `
     color: #FF331F; margin-bottom: 8px;
   }
 
-  /* ── Admin notes slot ── */
-  #admin-notes-slot { display: flex; flex-direction: column; gap: 10px; }
-
-  .post.admin-post {
-    background: #2b2400;
-    border: 1px solid #f2c94c;
-    box-shadow: 0 0 14px rgba(202,138,4,0.25);
-  }
-  .post.admin-post .username  { color: #fbbf24; }
-  .post.admin-post .post-text { color: #fef3c7; }
-  .post.admin-post .new-badge { background: #ca8a04; color: #fff; }
-  .admin-label {
-    font-size: 10px; font-weight: 700; letter-spacing: 1px;
-    color: #fbbf24; text-transform: uppercase;
-  }
-  .admin-dismiss-btn {
-    background: none;
-    border: 1px solid #ca8a04;
-    border-radius: 999px;
-    color: #fbbf24;
-    font-size: 11px; padding: 2px 10px;
-    cursor: pointer; transition: background 0.15s;
-  }
-  .admin-dismiss-btn:hover { background: rgba(202,138,4,0.2); }
-
-  /* ── Bottom bar ── */
+  /* Bottom bar */
   .bottom-bar {
     position: fixed; bottom: 0;
     left: 50%; transform: translateX(-50%);
@@ -971,7 +893,7 @@ const STYLES = `
     align-items: center;
   }
 
-  /* ── Compose overlay ── */
+  /* Compose overlay */
   .compose-overlay { display: none; position: fixed; inset: 0; z-index: 20; }
   .compose-overlay.open { display: block; }
 
@@ -990,7 +912,6 @@ const STYLES = `
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   }
 
-  /* Photo preview inside compose */
   .photo-preview-container {
     display: flex;
     align-items: center;
@@ -1042,7 +963,7 @@ const STYLES = `
     font-family: inherit;
   }
   .compose-input::placeholder { color: var(--muted); }
-  .compose-input:focus        { border-color: var(--accent-soft); }
+  .compose-input:focus { border-color: var(--accent-soft); }
 
   .send-btn {
     width: 38px; height: 38px;
@@ -1070,7 +991,7 @@ const STYLES = `
     color: var(--white);
   }
 
-  /* ── GIF picker ── */
+  /* GIF picker */
   .gif-picker {
     display: none;
     position: absolute;
@@ -1095,7 +1016,7 @@ const STYLES = `
     transform: scale(0.96);
   }
 
-  /* ── Report overlay ── */
+  /* Report overlay */
   .report-overlay { display: none; position: fixed; inset: 0; z-index: 20; }
   .report-overlay.open { display: block; }
 
@@ -1121,7 +1042,7 @@ const STYLES = `
     outline: none; font-family: inherit;
   }
   .report-input::placeholder { color: #FF331F88; }
-  .report-input:focus        { border-color: #FF331F; }
+  .report-input:focus { border-color: #FF331F; }
 
   .report-send-btn {
     width: 38px; height: 38px;
@@ -1133,7 +1054,7 @@ const STYLES = `
   }
   .report-send-btn:active { background: #cc2010; }
 
-  /* ── Camera overlay ── */
+  /* Camera overlay */
   .camera-overlay {
     display: none; position: fixed; inset: 0; z-index: 30;
     background: rgba(0,0,0,0.85);
@@ -1163,7 +1084,7 @@ const STYLES = `
     display: flex; align-items: center; justify-content: center;
   }
 
-  /* ── Light show overlay ── */
+  /* Light show overlay */
   .lightshow-overlay {
     display: none; position: fixed; inset: 0; z-index: 100;
     cursor: pointer;
