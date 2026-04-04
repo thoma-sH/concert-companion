@@ -85,10 +85,8 @@ export default function ManagePage() {
   const [previewColor, setPreviewColor] = useState("#38b6ff");
   const [effectSpeed, setEffectSpeed] = useState(1.0);
 
-  // Local animation preview (only for the manage screen, not broadcast)
   const previewIntervalRef = useRef(null);
 
-  // Helper: apply brightness to a hex color and return CSS rgb
   function applyBrightnessToHex(hex, percent) {
     if (!hex || hex === "#000000") return hex;
     const { r, g, b } = hexToRgbObj(hex);
@@ -96,7 +94,6 @@ export default function ManagePage() {
     return `rgb(${Math.min(255, Math.floor(r * f))}, ${Math.min(255, Math.floor(g * f))}, ${Math.min(255, Math.floor(b * f))})`;
   }
 
-  // Update the shared state (effect + color) via API
   const updateSharedState = useCallback(async (effect, color) => {
     if (!concertId) return;
     try {
@@ -110,7 +107,6 @@ export default function ManagePage() {
     }
   }, [concertId]);
 
-  // Stop any local preview animation
   const stopLocalPreview = useCallback(() => {
     if (previewIntervalRef.current) {
       clearInterval(previewIntervalRef.current);
@@ -118,7 +114,6 @@ export default function ManagePage() {
     }
   }, []);
 
-  // Start local preview animation (for the manage screen's own display)
   const startLocalPreview = useCallback((type) => {
     stopLocalPreview();
     const { r, g, b } = hexToRgbObj(baseColor);
@@ -143,7 +138,6 @@ export default function ManagePage() {
     }
   }, [baseColor, brightness, effectSpeed, stopLocalPreview]);
 
-  // When effect or color changes, update shared state and local preview
   useEffect(() => {
     if (activeEffect) {
       updateSharedState(activeEffect, baseColor);
@@ -156,12 +150,10 @@ export default function ManagePage() {
     }
   }, [activeEffect, baseColor, brightness, effectSpeed, updateSharedState, startLocalPreview, stopLocalPreview]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => stopLocalPreview();
   }, [stopLocalPreview]);
 
-  //  Fetch chat messages 
   function fetchMessages() {
     if (!concertId) return;
     fetch("/api/chat/get?concertId=" + concertId)
@@ -187,7 +179,6 @@ export default function ManagePage() {
     return () => clearInterval(interval);
   }, [concertId]);
 
-  //  Chat & report helpers 
   function handleDeleteMessage(id) {
     fetch("/api/chat/delete", { method: "POST", body: JSON.stringify({ chatId: id }) });
   }
@@ -202,7 +193,6 @@ export default function ManagePage() {
     setNewMessage("");
   }
 
-  //  QR code helpers 
   const handleCopyLink = async () => {
     try { await navigator.clipboard.writeText(qrUrl); }
     catch {
@@ -272,7 +262,6 @@ export default function ManagePage() {
 
         {activeTab === "lightsync" && (
           <div className="space-y-4">
-            {/* Live preview */}
             <div className="rounded-2xl overflow-hidden border border-[#38b6ff]/20">
               <div className="w-full h-28 flex items-center justify-center"
                 style={{ backgroundColor: previewColor, transition: "background-color 120ms ease" }}>
@@ -282,7 +271,6 @@ export default function ManagePage() {
               </div>
             </div>
 
-            {/* Color card */}
             <div className="bg-[#0a1f3d]/60 rounded-2xl p-4 border border-[#38b6ff]/20 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-[#b0d4ff] uppercase tracking-wider">Color</h3>
@@ -300,7 +288,6 @@ export default function ManagePage() {
               <RgbPicker color={baseColor} onChange={(hex) => { setBaseColor(hex); if (activeEffect) setActiveEffect(null); }} />
             </div>
 
-            {/* Brightness card */}
             <div className="bg-[#0a1f3d]/60 rounded-2xl p-4 border border-[#38b6ff]/20">
               <div className="flex justify-between mb-2">
                 <h3 className="text-sm font-semibold text-[#b0d4ff] uppercase tracking-wider">Brightness</h3>
@@ -316,7 +303,6 @@ export default function ManagePage() {
               </div>
             </div>
 
-            {/* Effects card */}
             <div className="bg-[#0a1f3d]/60 rounded-2xl p-4 border border-[#38b6ff]/20 space-y-3">
               <h3 className="text-sm font-semibold text-[#b0d4ff] uppercase tracking-wider">Effects</h3>
               <div className="grid grid-cols-2 gap-2">
@@ -352,12 +338,13 @@ export default function ManagePage() {
             <div className="h-80 overflow-y-auto space-y-2 mb-4">
               {messages.length === 0 && <p className="text-gray-500 text-center">No messages yet.</p>}
               {messages.map((msg) => (
-                <div key={msg.idChatMessage} className="bg-black/30 p-2 rounded flex justify-between items-start group">
+                <div key={msg.idChatMessage} className={`p-2 rounded flex justify-between items-start group ${msg.Type == 20 ? "bg-red-950/60 border border-red-500/40" : "bg-black/30"}`}>
                   <div className="flex-1">
                     <span className="text-xs text-[#38b6ff]">{msg.timestamp}</span>
-                    <span className="ml-2 font-semibold">{msg.Username || "Official Concert"}:</span>
-                    {(msg.Type != 4 && msg.Type != 1) && <span className="ml-2 break-words">{msg.Message}</span>}
-                    {msg.Type == 4 || msg.Type == 1 && <img alt="img" src={msg.Message}></img>}
+                    <span className={`ml-2 font-semibold ${msg.Type == 20 ? "text-red-400" : ""}`}>{msg.Username || "Official Concert"}:</span>
+                    {(msg.Type != 4 && msg.Type != 1) && <span className={`ml-2 break-words ${msg.Type == 20 ? "text-red-300" : ""}`}>{msg.Message}</span>}
+                    {(msg.Type == 4 || msg.Type == 1) && <img alt="img" src={msg.Message} />}
+                    {msg.Type == 20 && <span className="ml-2 text-xs font-bold text-red-500 uppercase tracking-wider">⚑ Report</span>}
                   </div>
                   <button onClick={() => handleDeleteMessage(msg.idChatMessage)} className="text-red-400 opacity-0 group-hover:opacity-100 transition ml-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -373,15 +360,6 @@ export default function ManagePage() {
             </div>
           </div>
         )}
-
-        {/*{activeTab === "reports" && (
-          <div className="bg-[#0a1f3d]/60 rounded-xl p-6 border border-[#38b6ff]/20">
-            <h2 className="text-lg font-semibold mb-2">Viewer Analytics</h2>
-            <p className="text-gray-300">Total unique viewers: 1,234</p>
-            <p className="text-gray-300">Peak concurrent: 567</p>
-            <p className="text-gray-400 text-sm mt-4">(Placeholder – connect your analytics API)</p>
-          </div>
-        )}*/}
       </div>
 
       {showQRModal && (

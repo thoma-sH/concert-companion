@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Script from "next/script";
 import { useSearchParams } from "next/navigation";
 
-//  Constants 
 const COLORS = [
   "#007EA7", "#2A9D8F", "#005F7F", "#4db8aa",
   "#FF331F", "#cc2010", "#ff6652",
@@ -23,7 +22,6 @@ const SIMILARITY_THRESHOLD = 0.60;
 const ADMIN_NOTES_KEY = "admin_notes";
 const ADMIN_NOTE_DURATION = 10 * 60 * 1000;
 
-//  Helpers 
 function tokenize(str) {
   return str
     .toLowerCase()
@@ -45,7 +43,6 @@ function randColor(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Color helpers for light show animation
 function hexToRgb(hex) {
   const bigint = parseInt(hex.slice(1), 16);
   return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
@@ -73,7 +70,6 @@ function hslToRgb(h, s, l) {
   return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
 }
 
-//  Component 
 export default function ConcertCompanion() {
   const [posts, setPosts] = useState([]);
   const [adminNotes, setAdminNotes] = useState([]);
@@ -87,8 +83,8 @@ export default function ConcertCompanion() {
   const [reportInput, setReportInput] = useState("");
   const [dismissedPins, setDismissedPins] = useState([]);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // Light show state (from backend)
   const [lightEffect, setLightEffect] = useState("solid");
   const [lightBaseColor, setLightBaseColor] = useState("#007EA7");
 
@@ -100,9 +96,11 @@ export default function ConcertCompanion() {
   const videoRef = useRef(null);
   const msgRef = useRef(null);
   const rptRef = useRef(null);
+  const feedRef = useRef(null);
+  const isUserScrolledUp = useRef(false);
+  const lastSeenCount = useRef(0);
   const searchParams = useSearchParams();
 
-  //  Fetch messages 
   function fetchMessages() {
     const concertId = searchParams.get("concertId");
     if (!concertId) return;
@@ -124,7 +122,34 @@ export default function ConcertCompanion() {
     return () => clearInterval(interval);
   }, [searchParams]);
 
-  //  Visualizer bars 
+  useEffect(() => {
+    setTimeout(() => {
+      const el = feedRef.current;
+      if (!el) return;
+      if (!isUserScrolledUp.current) {
+        el.scrollTop = el.scrollHeight;
+        lastSeenCount.current = posts.length;
+        setUnreadCount(0);
+      } else {
+        const newUnseen = posts.length - lastSeenCount.current;
+        setUnreadCount(newUnseen > 0 ? newUnseen : 0);
+      }
+    }, 0);
+  }, [posts]);
+
+  function handleFeedScroll() {
+    const el = feedRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    if (atBottom) {
+      isUserScrolledUp.current = false;
+      lastSeenCount.current = posts.length;
+      setUnreadCount(0);
+    } else {
+      isUserScrolledUp.current = true;
+    }
+  }
+
   const visBars = useMemo(
     () =>
       Array.from({ length: 28 }, (_, i) => ({
@@ -137,14 +162,11 @@ export default function ConcertCompanion() {
     []
   );
 
-  //  Auto-focus inputs 
   useEffect(() => { if (composeOpen) setTimeout(() => msgRef.current?.focus(), 50); }, [composeOpen]);
   useEffect(() => { if (reportOpen) setTimeout(() => rptRef.current?.focus(), 50); }, [reportOpen]);
 
-  //  ID generator (for optimistic updates, optional) 
   function uid() { return nextId.current++; }
 
-  //  Expire NEW badge after 10 s 
   function expireBadge(id) {
     setTimeout(
       () => setPosts((p) => p.map((x) => (x.id === id ? { ...x, isNew: false } : x))),
@@ -152,7 +174,6 @@ export default function ConcertCompanion() {
     );
   }
 
-  //  Like toggle 
   function toggleLike(postId) {
     const post = posts.find(p => p.idChatMessage == postId);
     if (!post) return;
@@ -171,7 +192,6 @@ export default function ConcertCompanion() {
     }
   }
 
-  //  Report 
   function submitReport(text) {
     fetch("/api/chat/post", {
       method: "POST",
@@ -184,7 +204,6 @@ export default function ConcertCompanion() {
     }).catch(err => console.error("Report send error:", err));
   }
 
-  //  Compose / report helpers 
   function closeCompose() {
     setComposeOpen(false);
     setGifPickerOpen(false);
@@ -210,14 +229,13 @@ export default function ConcertCompanion() {
     closeCompose();
   }
 
-  // PHOTO SENDING
   function sendPhoto() {
     if (!capturedPhoto) return;
 
     const payload = {
       messageType: "image",
       concertId: searchParams.get("concertId"),
-      messageData: capturedPhoto   // base64 JPEG
+      messageData: capturedPhoto
     };
 
     console.log("Sending photo, payload size:", capturedPhoto.length);
@@ -232,7 +250,6 @@ export default function ConcertCompanion() {
         const data = await res.json();
         console.log("Photo send response:", data);
         if (!data.success) throw new Error(data.error || "Unknown error");
-        // Success: clear photo and close composer
         setCapturedPhoto(null);
         setMessageInput("");
         closeCompose();
@@ -256,7 +273,6 @@ export default function ConcertCompanion() {
     closeReport();
   }
 
-  //  GIF picker 
   async function postGif(src) {
     try {
       const res = await fetch("/api/chat/post", {
@@ -275,7 +291,6 @@ export default function ConcertCompanion() {
     }
   }
 
-  //  Camera with preview 
   async function openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -319,7 +334,6 @@ export default function ConcertCompanion() {
     setComposeOpen(true);
   }
 
-  //  Light show with breath/rainbow animation 
   function pollLightState() {
     const concertId = searchParams.get("concertId");
     if (!concertId) return;
@@ -386,13 +400,11 @@ export default function ConcertCompanion() {
     }
   }
 
-  //  Sort posts 
   const sortedPosts = useMemo(
     () => [...posts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)),
     [posts]
   );
 
-  //  Render 
   return (
     <>
       <style>{STYLES}</style>
@@ -400,7 +412,6 @@ export default function ConcertCompanion() {
 
       <div className="app">
 
-        {/* Header */}
         <div className="header">
           <div className="header-top">
             <div>
@@ -432,8 +443,7 @@ export default function ConcertCompanion() {
           </div>
         </div>
 
-        {/* Feed */}
-        <div className="feed">
+        <div className="feed" ref={feedRef} onScroll={handleFeedScroll}>
           {sortedPosts.map((post) => (
             <div
               key={post.idChatMessage}
@@ -484,7 +494,20 @@ export default function ConcertCompanion() {
           ))}
         </div>
 
-        {/* Bottom bar */}
+        {unreadCount > 0 && (
+          <button
+            className="new-messages-pill"
+            onClick={() => {
+              feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
+              lastSeenCount.current = posts.length;
+              setUnreadCount(0);
+              isUserScrolledUp.current = false;
+            }}
+          >
+            ↓ New messages
+          </button>
+        )}
+
         <div className="bottom-bar">
           <button className="lights-btn" onClick={openLightShow}>
             <span className="lights-btn__label">
@@ -526,7 +549,6 @@ export default function ConcertCompanion() {
           </div>
         </div>
 
-        {/* Compose overlay */}
         {composeOpen && (
           <div className="compose-overlay open" onClick={closeCompose}>
             {gifPickerOpen && !capturedPhoto && (
@@ -590,7 +612,6 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* Report overlay */}
         {reportOpen && (
           <div className="report-overlay open" onClick={closeReport}>
             <div className="report-panel" onClick={(e) => e.stopPropagation()}>
@@ -610,7 +631,6 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* Camera overlay */}
         {cameraOpen && (
           <div className="camera-overlay open">
             <video ref={videoRef} autoPlay playsInline muted />
@@ -630,7 +650,6 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* Light show overlay */}
         {lightshowOpen && (
           <div
             className="lightshow-overlay open"
@@ -645,7 +664,6 @@ export default function ConcertCompanion() {
   );
 }
 
-//  All styles (unchanged, includes photo preview styles) 
 const STYLES = `
   :root {
     --bg:          #0a0a12;
@@ -686,7 +704,6 @@ const STYLES = `
     margin: 0 auto;
   }
 
-  /* Header */
   .header { padding: 20px 16px 0; background: var(--bg); }
   .header-top {
     display: flex;
@@ -722,7 +739,6 @@ const STYLES = `
     color: var(--accent-pale);
   }
 
-  /* Visualizer */
   .visualizer { display: flex; align-items: flex-end; gap: 3px; padding: 0 2px; }
   .vis-bar {
     flex: 1;
@@ -732,18 +748,22 @@ const STYLES = `
   }
   @keyframes bounce { from { transform: scaleY(0.15); } to { transform: scaleY(1); } }
 
-  /* Feed */
   .feed {
-    flex: 1;
+    position: fixed;
+    top: 130px;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 400px;
     padding: 12px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     overflow-y: auto;
-    padding-bottom: 110px;
+    padding-bottom: 20px;
   }
 
-  /* Post cards */
   .post {
     background: var(--surface);
     border: 1px solid var(--surface-2);
@@ -784,7 +804,6 @@ const STYLES = `
   .like-count { font-size: 13px; }
   .report-count { font-size: 11px; color: var(--subtle); }
 
-  /* Report posts */
   .post.is-report {
     border-color: #FF331F44;
     background: color-mix(in srgb, var(--surface) 85%, #FF331F 15%);
@@ -803,7 +822,29 @@ const STYLES = `
     color: #FF331F; margin-bottom: 8px;
   }
 
-  /* Bottom bar */
+  .new-messages-pill {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent-soft);
+    color: var(--white);
+    border: none;
+    border-radius: 999px;
+    padding: 7px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 12px rgba(0, 126, 167, 0.5);
+    z-index: 15;
+    animation: pill-pop 0.2s ease;
+    letter-spacing: 0.3px;
+  }
+  @keyframes pill-pop {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
   .bottom-bar {
     position: fixed; bottom: 0;
     left: 50%; transform: translateX(-50%);
@@ -816,7 +857,6 @@ const STYLES = `
     justify-content: space-between;
   }
 
-  /* Lights button */
   .lights-btn {
     position: fixed; bottom: 0; left: 0;
     width: 135px; height: 80px;
@@ -855,7 +895,6 @@ const STYLES = `
     100% { background-position: 0% 50%; }
   }
 
-  /* Nav buttons */
   .nav-btn {
     width: 76px; height: 76px;
     border-radius: 50%;
@@ -893,7 +932,6 @@ const STYLES = `
     align-items: center;
   }
 
-  /* Compose overlay */
   .compose-overlay { display: none; position: fixed; inset: 0; z-index: 20; }
   .compose-overlay.open { display: block; }
 
@@ -991,7 +1029,6 @@ const STYLES = `
     color: var(--white);
   }
 
-  /* GIF picker */
   .gif-picker {
     display: none;
     position: absolute;
@@ -1016,7 +1053,6 @@ const STYLES = `
     transform: scale(0.96);
   }
 
-  /* Report overlay */
   .report-overlay { display: none; position: fixed; inset: 0; z-index: 20; }
   .report-overlay.open { display: block; }
 
@@ -1054,7 +1090,6 @@ const STYLES = `
   }
   .report-send-btn:active { background: #cc2010; }
 
-  /* Camera overlay */
   .camera-overlay {
     display: none; position: fixed; inset: 0; z-index: 30;
     background: rgba(0,0,0,0.85);
@@ -1084,7 +1119,6 @@ const STYLES = `
     display: flex; align-items: center; justify-content: center;
   }
 
-  /* Light show overlay */
   .lightshow-overlay {
     display: none; position: fixed; inset: 0; z-index: 100;
     cursor: pointer;
