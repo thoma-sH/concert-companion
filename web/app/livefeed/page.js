@@ -86,6 +86,9 @@ export default function ConcertCompanion() {
   const [messageInput, setMessageInput] = useState("");
   const [reportInput, setReportInput] = useState("");
   const [dismissedPins, setdismissedPins] = useState([]);
+  
+  // NEW: captured photo preview (base64 string or null)
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
 
   // Light show state (from backend)
   const [lightEffect, setLightEffect] = useState("solid");
@@ -210,10 +213,21 @@ export default function ConcertCompanion() {
   }
 
   // ── Compose / report helpers ────────────────────────────────────────────
-  function closeCompose() { setComposeOpen(false); setGifPickerOpen(false); }
+  function closeCompose() { 
+    setComposeOpen(false); 
+    setGifPickerOpen(false);
+    // Do NOT clear capturedPhoto here – it should stay if user reopens compose
+  }
   function closeReport() { setReportOpen(false); }
 
   function sendMessage() {
+    // If there's a captured photo, send it first
+    if (capturedPhoto) {
+      sendPhoto();
+      return;
+    }
+    // Otherwise send text
+    if (!messageInput.trim()) return;
     fetch("/api/chat/post", {
       method: "POST", body: JSON.stringify({
         messageType: "message",
@@ -225,6 +239,28 @@ export default function ConcertCompanion() {
     closeCompose();
   }
 
+  function sendPhoto() {
+    if (!capturedPhoto) return;
+    fetch("/api/chat/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messageType: "image",
+        concertId: searchParams.get("concertId"),
+        messageData: capturedPhoto
+      })
+    });
+    setCapturedPhoto(null);
+    setMessageInput("");
+    closeCompose();
+  }
+
+  function removePhoto() {
+    setCapturedPhoto(null);
+    // Optionally focus text input again
+    setTimeout(() => msgRef.current?.focus(), 50);
+  }
+
   function sendReport() {
     const text = reportInput.trim();
     if (!text) return;
@@ -233,7 +269,7 @@ export default function ConcertCompanion() {
     closeReport();
   }
 
-  // ── GIF picker (fixed) ─────────────────────────────────────────────────
+  // ── GIF picker ──────────────────────────────────────────────────────────
   async function postGif(src) {
     await fetch("/api/chat/post", {
       method: "POST",
@@ -247,7 +283,7 @@ export default function ConcertCompanion() {
     closeCompose();
   }
 
-  // ── Camera (fixed) ──────────────────────────────────────────────────────
+  // ── Camera (fixed with preview) ─────────────────────────────────────────
   async function openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -286,16 +322,11 @@ export default function ConcertCompanion() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
-    fetch("/api/chat/post", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messageType: "image",
-        concertId: searchParams.get("concertId"),
-        messageData: canvas.toDataURL("image/jpeg")
-      })
-    });
-    closeCamera();
+    const photoData = canvas.toDataURL("image/jpeg");
+    setCapturedPhoto(photoData);   // store preview
+    closeCamera();                 // close camera overlay
+    // Reopen compose panel to show preview
+    setComposeOpen(true);
   }
 
   // ── Light show (with breath/rainbow animation) ──────────────────────────
@@ -352,23 +383,9 @@ export default function ConcertCompanion() {
 
   function openLightShow() {
     setLightshowOpen(true);
-    const concertId = searchParams.get("concertId");
-    lightInterval.current = setInterval(async () => {
-      try {
-        const resp = await fetch("/api/concertColor?concertId=" + concertId);
-        const json_resp = await resp.json();
-        if (json_resp.success) {
-          let r = (json_resp.color >> 16) & 0xFF;
-          let g = (json_resp.color >> 8) & 0xFF;
-          let b = json_resp.color & 0xFF;
-          let cssColor = `rgb(${r}, ${g}, ${b})`;
-          setLightBg(cssColor);
-
-        }
-      } catch (e) {
-        console.error("Light show fetch error:", e);
-      }
-    }, 200);
+    if (lightInterval.current) clearInterval(lightInterval.current);
+    lightInterval.current = setInterval(pollLightState, 500);
+    pollLightState();
   }
 
   function closeLightShow() {
@@ -555,14 +572,14 @@ export default function ConcertCompanion() {
           </div>
         </div>
 
-        {/* ── Compose overlay ── */}
+        {/* ── Compose overlay (with photo preview) ── */}
         {composeOpen && (
           <div
             className="compose-overlay open"
             onClick={closeCompose}
           >
-            {/* GIF picker */}
-            {gifPickerOpen && (
+            {/* GIF picker (only show if no photo preview) */}
+            {gifPickerOpen && !capturedPhoto && (
               <div className="gif-picker open" onClick={(e) => e.stopPropagation()}>
                 <div className="gif-grid">
                   {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
@@ -580,34 +597,47 @@ export default function ConcertCompanion() {
 
             {/* Compose panel */}
             <div className="compose-panel" onClick={(e) => e.stopPropagation()}>
-              <button className="cam-btn" onClick={openCamera}>
-                <lord-icon
-                  src="https://cdn.lordicon.com/wsaaegar.json"
-                  trigger="loop"
-                  delay="500"
-                  stroke="bold"
-                  colors="primary:#30c9e8,secondary:#16a9c7"
-                  style={{ width: 32, height: 32 }}
-                />
-              </button>
-              <input
-                ref={msgRef}
-                className="compose-input"
-                type="text"
-                placeholder="Share the vibe..."
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              />
-              <button
-                className={`gif-toggle-btn${gifPickerOpen ? " active" : ""}`}
-                onClick={(e) => { e.stopPropagation(); setGifPickerOpen((o) => !o); }}
-              >
-                GIF
-              </button>
-              <button className="send-btn" onClick={sendMessage}>
-                &#10148;
-              </button>
+              {!capturedPhoto ? (
+                <>
+                  <button className="cam-btn" onClick={openCamera}>
+                    <lord-icon
+                      src="https://cdn.lordicon.com/wsaaegar.json"
+                      trigger="loop"
+                      delay="500"
+                      stroke="bold"
+                      colors="primary:#30c9e8,secondary:#16a9c7"
+                      style={{ width: 32, height: 32 }}
+                    />
+                  </button>
+                  <input
+                    ref={msgRef}
+                    className="compose-input"
+                    type="text"
+                    placeholder="Share the vibe..."
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                  />
+                  <button
+                    className={`gif-toggle-btn${gifPickerOpen ? " active" : ""}`}
+                    onClick={(e) => { e.stopPropagation(); setGifPickerOpen((o) => !o); }}
+                  >
+                    GIF
+                  </button>
+                  <button className="send-btn" onClick={sendMessage}>
+                    &#10148;
+                  </button>
+                </>
+              ) : (
+                // Photo preview with send/remove buttons
+                <div className="photo-preview-container">
+                  <img src={capturedPhoto} alt="preview" className="photo-preview" />
+                  <div className="photo-preview-buttons">
+                    <button className="send-btn" onClick={sendPhoto}>Send</button>
+                    <button className="remove-photo-btn" onClick={removePhoto}>Remove</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -632,7 +662,7 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* ── Camera overlay (fixed) ── */}
+        {/* ── Camera overlay ── */}
         {cameraOpen && (
           <div className="camera-overlay open">
             <video ref={videoRef} autoPlay playsInline muted />
@@ -667,7 +697,7 @@ export default function ConcertCompanion() {
   );
 }
 
-// ── All styles (unchanged) ─────────────────────────────────────────────────
+// ── Styles (add photo preview styles at the end) ───────────────────────────
 const STYLES = `
   :root {
     --bg:          #0a0a12;
@@ -952,9 +982,43 @@ const STYLES = `
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 20px; padding: 12px;
-    display: flex; align-items: center; gap: 6px;
-    width: calc(100% - 48px); max-width: 352px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: calc(100% - 48px);
+    max-width: 352px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  /* Photo preview inside compose */
+  .photo-preview-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+  .photo-preview {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 2px solid var(--accent-soft);
+  }
+  .photo-preview-buttons {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    justify-content: flex-end;
+  }
+  .remove-photo-btn {
+    background: #FF331F;
+    border: none;
+    border-radius: 999px;
+    color: white;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
   }
 
   .cam-btn {
