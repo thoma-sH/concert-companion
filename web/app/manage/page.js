@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+export const dynamic = "force-dynamic";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
 
@@ -68,7 +69,10 @@ function RgbPicker({ color, onChange }) {
   );
 }
 
-export default function ManagePage() {
+export default function Page() {
+  return (<Suspense fallback={null}><ManagePage /></Suspense>)
+}
+function ManagePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const concertId = searchParams.get("concertId");
@@ -357,7 +361,7 @@ export default function ManagePage() {
                     <span className="text-xs text-[#38b6ff]">{msg.timestamp}</span>
                     <span className="ml-2 font-semibold">{msg.Username || "Official Concert"}:</span>
                     {(msg.Type != 4 && msg.Type != 1) && <span className="ml-2 break-words">{msg.Message}</span>}
-                    {msg.Type == 4 || msg.Type == 1 && <img alt="img" src={msg.Message}></img>}
+                    {(msg.Type == 4 || msg.Type == 1) && <img alt="img" src={msg.Message}></img>}
                   </div>
                   <button onClick={() => handleDeleteMessage(msg.idChatMessage)} className="text-red-400 opacity-0 group-hover:opacity-100 transition ml-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>

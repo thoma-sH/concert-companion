@@ -1,5 +1,5 @@
-import { getVenue } from "@/app/api/lib/auth";
-import pool from "@/app/api/lib/db";
+import { getVenue } from "../../../lib/auth";
+import pool from "../../../lib/db"
 import { NextResponse } from "next/server";
 
 export async function POST(request) {
