@@ -502,7 +502,7 @@ export default function ConcertCompanion() {
             {gifPickerOpen && (
               <div className="gif-picker open" onClick={(e) => e.stopPropagation()}>
                 <div className="gif-grid">
-                  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                     <img
                       key={i}
                       src={`/Gifs/gif${i}.gif`}
@@ -575,7 +575,14 @@ export default function ConcertCompanion() {
             <video ref={videoRef} autoPlay playsInline />
             <div className="camera-controls">
               <button className="camera-close-btn" onClick={closeCamera}>✕</button>
-              <button className="camera-snap-btn"  onClick={snapPhoto}>📷</button>
+              <button className="camera-snap-btn"  onClick={snapPhoto}>      <lord-icon
+                  src="https://cdn.lordicon.com/wsaaegar.json"
+                  trigger="loop"
+                  delay="500"
+                  stroke="bold"
+                  colors="primary:#30c9e8,secondary:#16a9c7"
+                  style={{ width: 32, height: 32 }}
+                /></button>
             </div>
           </div>
         )}
