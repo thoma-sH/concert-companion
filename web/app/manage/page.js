@@ -345,16 +345,9 @@ function ManagePage() {
                 <div key={msg.idChatMessage} className={`p-2 rounded flex justify-between items-start group ${msg.Type == 20 ? "bg-red-950/60 border border-red-500/40" : "bg-black/30"}`}>
                   <div className="flex-1">
                     <span className="text-xs text-[#38b6ff]">{msg.timestamp}</span>
-<<<<<<< HEAD
-                    <span className={`ml-2 font-semibold ${msg.Type == 20 ? "text-red-400" : ""}`}>{msg.Username || "Official Concert"}:</span>
-                    {(msg.Type != 4 && msg.Type != 1) && <span className={`ml-2 break-words ${msg.Type == 20 ? "text-red-300" : ""}`}>{msg.Message}</span>}
-                    {(msg.Type == 4 || msg.Type == 1) && <img alt="img" src={msg.Message} />}
-                    {msg.Type == 20 && <span className="ml-2 text-xs font-bold text-red-500 uppercase tracking-wider">⚑ Report</span>}
-=======
                     <span className="ml-2 font-semibold">{msg.Username || "Official Concert"}:</span>
                     {(msg.Type != 4 && msg.Type != 1) && <span className="ml-2 break-words">{msg.Message}</span>}
                     {(msg.Type == 4 || msg.Type == 1) && <img alt="img" src={msg.Message}></img>}
->>>>>>> 6bc9d36b7b0b913b0ce680d910337cccb974a2c5
                   </div>
                   <button onClick={() => handleDeleteMessage(msg.idChatMessage)} className="text-red-400 opacity-0 group-hover:opacity-100 transition ml-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
