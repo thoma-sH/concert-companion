@@ -10,7 +10,6 @@ export async function getVenue(request) {
     }
     try {
         let payload = await jwtVerify(token, SECRET);
-        console.log(payload)
         if (payload.payload.type != "venue") {
             return undefined
         }
@@ -27,7 +26,6 @@ export async function getUser(request) {
     }
     try {
         let payload = await jwtVerify(token, SECRET);
-        console.log(payload)
         if (payload.payload.type != "user") {
             return { userId: undefined, concertId: undefined }
         }
