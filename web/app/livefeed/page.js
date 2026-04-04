@@ -81,13 +81,11 @@ function ConcertCompanion() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [cameraOpen, setCameraOpen] = useState(false);
   const [lightshowOpen, setLightshowOpen] = useState(false);
   const [lightBg, setLightBg] = useState("");
   const [messageInput, setMessageInput] = useState("");
   const [reportInput, setReportInput] = useState("");
   const [dismissedPins, setDismissedPins] = useState([]);
-  const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const [lightEffect, setLightEffect] = useState("solid");
@@ -97,8 +95,6 @@ function ConcertCompanion() {
   const reportBuckets = useRef([]);
   const lightInterval = useRef(null);
   const animationFrameId = useRef(null);
-  const cameraStream = useRef(null);
-  const videoRef = useRef(null);
   const msgRef = useRef(null);
   const rptRef = useRef(null);
   const feedRef = useRef(null);
@@ -216,10 +212,6 @@ function ConcertCompanion() {
   function closeReport() { setReportOpen(false); }
 
   function sendMessage() {
-    if (capturedPhoto) {
-      sendPhoto();
-      return;
-    }
     if (!messageInput.trim()) return;
     fetch("/api/chat/post", {
       method: "POST",
@@ -232,42 +224,6 @@ function ConcertCompanion() {
     }).catch(err => console.error("Send message error:", err));
     setMessageInput("");
     closeCompose();
-  }
-
-  function sendPhoto() {
-    if (!capturedPhoto) return;
-
-    const payload = {
-      messageType: "image",
-      concertId: searchParams.get("concertId"),
-      messageData: capturedPhoto
-    };
-
-    console.log("Sending photo, payload size:", capturedPhoto.length);
-
-    fetch("/api/chat/post", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-      .then(async res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        console.log("Photo send response:", data);
-        if (!data.success) throw new Error(data.error || "Unknown error");
-        setCapturedPhoto(null);
-        setMessageInput("");
-        closeCompose();
-      })
-      .catch(err => {
-        console.error("Failed to send photo:", err);
-        alert("Could not send photo. Check console or backend.");
-      });
-  }
-
-  function removePhoto() {
-    setCapturedPhoto(null);
-    setTimeout(() => msgRef.current?.focus(), 50);
   }
 
   function sendReport() {
@@ -294,49 +250,6 @@ function ConcertCompanion() {
     } catch (err) {
       console.error("GIF error:", err);
     }
-  }
-
-  async function openCamera() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false,
-      });
-      cameraStream.current = stream;
-      setCameraOpen(true);
-      closeCompose();
-    } catch (err) {
-      alert("Camera not available: " + err.message);
-    }
-  }
-
-  function closeCamera() {
-    setCameraOpen(false);
-    cameraStream.current?.getTracks().forEach((t) => t.stop());
-    cameraStream.current = null;
-  }
-
-  useEffect(() => {
-    if (cameraOpen && videoRef.current && cameraStream.current) {
-      videoRef.current.srcObject = cameraStream.current;
-      videoRef.current.play().catch(e => console.warn("autoplay failed", e));
-    }
-  }, [cameraOpen]);
-
-  function snapPhoto() {
-    const video = videoRef.current;
-    if (!video || video.videoWidth === 0) {
-      alert("Camera not ready yet. Please wait a moment.");
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    const photoData = canvas.toDataURL("image/jpeg");
-    setCapturedPhoto(photoData);
-    closeCamera();
-    setComposeOpen(true);
   }
 
   function pollLightState() {
@@ -556,7 +469,7 @@ function ConcertCompanion() {
 
         {composeOpen && (
           <div className="compose-overlay open" onClick={closeCompose}>
-            {gifPickerOpen && !capturedPhoto && (
+            {gifPickerOpen && (
               <div className="gif-picker open" onClick={(e) => e.stopPropagation()}>
                 <div className="gif-grid">
                   {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
@@ -573,46 +486,25 @@ function ConcertCompanion() {
             )}
 
             <div className="compose-panel" onClick={(e) => e.stopPropagation()}>
-              {!capturedPhoto ? (
-                <>
-                  <button className="cam-btn" onClick={openCamera}>
-                    <lord-icon
-                      src="https://cdn.lordicon.com/wsaaegar.json"
-                      trigger="loop"
-                      delay="500"
-                      stroke="bold"
-                      colors="primary:#30c9e8,secondary:#16a9c7"
-                      style={{ width: 32, height: 32 }}
-                    />
-                  </button>
-                  <input
-                    ref={msgRef}
-                    className="compose-input"
-                    type="text"
-                    placeholder="Share the vibe..."
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                  />
-                  <button
-                    className={`gif-toggle-btn${gifPickerOpen ? " active" : ""}`}
-                    onClick={(e) => { e.stopPropagation(); setGifPickerOpen((o) => !o); }}
-                  >
-                    GIF
-                  </button>
-                  <button className="send-btn" onClick={sendMessage}>
-                    &#10148;
-                  </button>
-                </>
-              ) : (
-                <div className="photo-preview-container">
-                  <img src={capturedPhoto} alt="preview" className="photo-preview" />
-                  <div className="photo-preview-buttons">
-                    <button className="send-btn" onClick={sendPhoto}>Send</button>
-                    <button className="remove-photo-btn" onClick={removePhoto}>Remove</button>
-                  </div>
-                </div>
-              )}
+              {/* Camera button removed */}
+              <input
+                ref={msgRef}
+                className="compose-input"
+                type="text"
+                placeholder="Share the vibe..."
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              />
+              <button
+                className={`gif-toggle-btn${gifPickerOpen ? " active" : ""}`}
+                onClick={(e) => { e.stopPropagation(); setGifPickerOpen((o) => !o); }}
+              >
+                GIF
+              </button>
+              <button className="send-btn" onClick={sendMessage}>
+                &#10148;
+              </button>
             </div>
           </div>
         )}
@@ -631,25 +523,6 @@ function ConcertCompanion() {
               />
               <button className="report-send-btn" onClick={sendReport}>
                 ⚑
-              </button>
-            </div>
-          </div>
-        )}
-
-        {cameraOpen && (
-          <div className="camera-overlay open">
-            <video ref={videoRef} autoPlay playsInline muted />
-            <div className="camera-controls">
-              <button className="camera-close-btn" onClick={closeCamera}>✕</button>
-              <button className="camera-snap-btn" onClick={snapPhoto}>
-                <lord-icon
-                  src="https://cdn.lordicon.com/wsaaegar.json"
-                  trigger="loop"
-                  delay="500"
-                  stroke="bold"
-                  colors="primary:#30c9e8,secondary:#16a9c7"
-                  style={{ width: 32, height: 32 }}
-                />
               </button>
             </div>
           </div>
@@ -957,45 +830,7 @@ const STYLES = `
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   }
 
-    .photo-preview-container {
-      display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-  }
-    .photo-preview {
-      width: 60px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 12px;
-    border: 2px solid var(--accent-soft);
-  }
-    .photo-preview-buttons {
-      display: flex;
-    gap: 8px;
-    flex: 1;
-    justify-content: flex-end;
-  }
-    .remove-photo-btn {
-      background: #FF331F;
-    border: none;
-    border-radius: 999px;
-    color: white;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: bold;
-    cursor: pointer;
-  }
-
-    .cam-btn {
-      width: 38px; height: 38px;
-    border-radius: 50%;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    font-size: 17px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
+    /* Camera-related styles removed (photo-preview, cam-btn, etc.) */
 
     .compose-input {
       flex: 1;
@@ -1099,35 +934,7 @@ const STYLES = `
   }
     .report-send-btn:active {background: #cc2010; }
 
-    /* Camera overlay */
-    .camera-overlay {
-      display: none; position: fixed; inset: 0; z-index: 30;
-    background: rgba(0,0,0,0.85);
-    flex-direction: column; align-items: center; justify-content: center;
-    gap: 16px;
-  }
-    .camera-overlay.open {display: flex; }
-    .camera-overlay video {
-      width: 100%; max-width: 360px;
-    border-radius: 16px; background: #000;
-  }
-    .camera-controls {display: flex; gap: 16px; }
-    .camera-snap-btn {
-      width: 64px; height: 64px;
-    border-radius: 50%;
-    background: var(--white);
-    border: 4px solid var(--accent);
-    cursor: pointer; font-size: 24px;
-    display: flex; align-items: center; justify-content: center;
-  }
-    .camera-close-btn {
-      width: 44px; height: 44px;
-    border-radius: 50%;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--white); cursor: pointer; font-size: 18px;
-    display: flex; align-items: center; justify-content: center;
-  }
+    /* Camera overlay removed */
 
     /* Light show overlay */
     .lightshow-overlay {
