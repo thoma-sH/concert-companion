@@ -262,7 +262,7 @@ export default function ManagePage() {
         </div>
 
         <div className="flex gap-2 border-b border-[#38b6ff]/20 mb-5">
-          {["lightsync", "chat", "reports"].map((tab) => (
+          {["lightsync", "chat"].map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 capitalize transition text-sm ${activeTab === tab ? "border-b-2 border-[#38b6ff] text-[#38b6ff]" : "text-gray-400 hover:text-white"}`}>
               {tab}
@@ -356,7 +356,8 @@ export default function ManagePage() {
                   <div className="flex-1">
                     <span className="text-xs text-[#38b6ff]">{msg.timestamp}</span>
                     <span className="ml-2 font-semibold">{msg.Username || "Official Concert"}:</span>
-                    <span className="ml-2 break-words">{msg.Message}</span>
+                    {(msg.Type != 4 && msg.Type != 1) && <span className="ml-2 break-words">{msg.Message}</span>}
+                    {msg.Type == 4 || msg.Type == 1 && <img alt="img" src={msg.Message}></img>}
                   </div>
                   <button onClick={() => handleDeleteMessage(msg.idChatMessage)} className="text-red-400 opacity-0 group-hover:opacity-100 transition ml-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -373,14 +374,14 @@ export default function ManagePage() {
           </div>
         )}
 
-        {activeTab === "reports" && (
+        {/*{activeTab === "reports" && (
           <div className="bg-[#0a1f3d]/60 rounded-xl p-6 border border-[#38b6ff]/20">
             <h2 className="text-lg font-semibold mb-2">Viewer Analytics</h2>
             <p className="text-gray-300">Total unique viewers: 1,234</p>
             <p className="text-gray-300">Peak concurrent: 567</p>
             <p className="text-gray-400 text-sm mt-4">(Placeholder – connect your analytics API)</p>
           </div>
-        )}
+        )}*/}
       </div>
 
       {showQRModal && (
