@@ -31,6 +31,15 @@ export default function ManagePage() {
   const [previewColor, setPreviewColor] = useState("#38b6ff");
   const effectRef = useRef(null);
 
+
+  function fetchMessages() {
+    fetch("/api/chat/get?concertId=" + concertId).then(async (response) => {
+      let json_response = await response.json()
+      if (json_response.success) {
+        setMessages(json_response.data)
+      }
+    })
+  }
   // Load concert + build join URL
   useEffect(() => {
     if (!concertId) return;
@@ -40,7 +49,9 @@ export default function ManagePage() {
       const found = concerts.find((c) => String(c.id) === String(concertId));
       setConcert(found || null);
     }
-    setQrUrl(`${window.location.origin}/livefeed?concertId=${concertId}`);
+    setQrUrl(`${window.location.origin}/UserOnboarding?concertId=${concertId}`);
+
+    setInterval(fetchMessages, 250)
   }, [concertId]);
 
   // ── QR actions ──────────────────────────────────────────
@@ -163,10 +174,27 @@ export default function ManagePage() {
     return `rgb(${Math.min(255, Math.floor(r * factor))}, ${Math.min(255, Math.floor(g * factor))}, ${Math.min(255, Math.floor(b * factor))})`;
   };
 
+  function handleDeleteMessage(id) {
+    fetch('/api/chat/delete', {
+      method: 'POST',
+      body: JSON.stringify({
+        chatId: id
+      })
+    })
+  }
+
   const updateSharedColor = useCallback((color) => {
     setPreviewColor(color);
     if (!concertId) return;
     localStorage.setItem(`lightsync_${concertId}`, color);
+
+    let color_code = (brightness << 24) | (parseInt(baseColor.replace("#", 16), 16) & 0xFFFFFF);
+    fetch("/api/venue/concert/setcolor", {
+      method: "POST", body: JSON.stringify({
+        concertId: concertId,
+        color: color_code
+      })
+    })
   }, [concertId]);
 
   const stopEffect = useCallback(() => {
@@ -175,6 +203,7 @@ export default function ManagePage() {
     const color = applyBrightness(baseColor, brightness);
     setPreviewColor(color);
     updateSharedColor(color);
+
   }, [baseColor, brightness, updateSharedColor]);
 
   const startEffect = useCallback((type) => {
@@ -223,10 +252,14 @@ export default function ManagePage() {
 
   const sendMessage = () => {
     if (!newMessage.trim()) return;
-    const newMsg = { id: Date.now(), text: newMessage, timestamp: new Date().toLocaleTimeString(), user: "Concert Admin" };
-    const updated = [...messages, newMsg];
-    setMessages(updated);
-    localStorage.setItem(`chat_${concertId}`, JSON.stringify(updated));
+    fetch("/api/chat/post", {
+      method: "POST",
+      body: JSON.stringify({
+        concertId: concertId,
+        messageData: newMessage,
+        messageType: "announcement"
+      })
+    })
     setNewMessage("");
   };
 
@@ -314,7 +347,8 @@ export default function ManagePage() {
                 </div>
               </div>
             </div>
-
+            <div>
+              {/*
             <div className="bg-[#0a1f3d]/60 rounded-xl p-6 border border-[#38b6ff]/20">
               <h3 className="text-md font-medium mb-3">Lighting Effects</h3>
               <div className="flex flex-wrap gap-3 mb-4">
@@ -341,8 +375,6 @@ export default function ManagePage() {
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
             <div className="bg-[#0a1f3d]/60 rounded-xl p-6 border border-[#38b6ff]/20">
               <h3 className="text-md font-medium mb-3">Quick Presets</h3>
@@ -351,7 +383,7 @@ export default function ManagePage() {
                   <button key={name} onClick={() => applyPreset(name)}
                     className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-sm transition">{name}</button>
                 ))}
-              </div>
+              </div>*/}
             </div>
           </div>
         )}
@@ -362,17 +394,13 @@ export default function ManagePage() {
             <div className="h-80 overflow-y-auto space-y-2 mb-4">
               {messages.length === 0 && <p className="text-gray-500 text-center">No messages yet.</p>}
               {messages.map((msg) => (
-                <div key={msg.id} className="bg-black/30 p-2 rounded flex justify-between items-start group">
+                <div key={msg.idChatMessage} className="bg-black/30 p-2 rounded flex justify-between items-start group">
                   <div className="flex-1">
                     <span className="text-xs text-[#38b6ff]">{msg.timestamp}</span>
-                    <span className="ml-2 font-semibold">{msg.user}:</span>
-                    <span className="ml-2 break-words">{msg.text}</span>
+                    <span className="ml-2 font-semibold">{msg.Username || "Official Concert"}:</span>
+                    <span className="ml-2 break-words">{msg.Message}</span>
                   </div>
-                  <button onClick={() => {
-                    const updated = messages.filter((m) => m.id !== msg.id);
-                    setMessages(updated);
-                    localStorage.setItem(`chat_${concertId}`, JSON.stringify(updated));
-                  }} className="text-red-400 opacity-0 group-hover:opacity-100 transition ml-2">
+                  <button onClick={() => handleDeleteMessage(msg.idChatMessage)} className="text-red-400 opacity-0 group-hover:opacity-100 transition ml-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
@@ -402,84 +430,85 @@ export default function ManagePage() {
       </div>
 
       {/* ── QR Code Modal ── */}
-      {showQRModal && (
-        <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowQRModal(false); }}
-        >
-          <div className="bg-[#0a1f3d] rounded-2xl border border-[#38b6ff]/30 p-6 max-w-sm w-full shadow-2xl">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-5">
-              <h2 className="text-lg font-bold text-white">My QR Code</h2>
-              <button onClick={() => setShowQRModal(false)} className="text-gray-400 hover:text-white transition">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* QR Code — rendered by qrcode.react directly into a canvas */}
-            <div className="flex flex-col items-center mb-5">
-              <div className="bg-white p-3 rounded-xl mb-3">
-                {qrUrl && (
-                  <QRCodeCanvas
-                    id="qr-canvas"
-                    value={qrUrl}
-                    size={240}
-                    bgColor="#ffffff"
-                    fgColor="#000000"
-                    level="H"
-                    includeMargin={false}
-                  />
-                )}
+      {
+        showQRModal && (
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowQRModal(false); }}
+          >
+            <div className="bg-[#0a1f3d] rounded-2xl border border-[#38b6ff]/30 p-6 max-w-sm w-full shadow-2xl">
+              {/* Header */}
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="text-lg font-bold text-white">My QR Code</h2>
+                <button onClick={() => setShowQRModal(false)} className="text-gray-400 hover:text-white transition">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <p className="text-xs text-[#b0d4ff] text-center break-all px-2">{qrUrl}</p>
-            </div>
 
-            {/* Action buttons */}
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <button
-                onClick={handleCopyLink}
-                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                  copySuccess
+              {/* QR Code — rendered by qrcode.react directly into a canvas */}
+              <div className="flex flex-col items-center mb-5">
+                <div className="bg-white p-3 rounded-xl mb-3">
+                  {qrUrl && (
+                    <QRCodeCanvas
+                      id="qr-canvas"
+                      value={qrUrl}
+                      size={240}
+                      bgColor="#ffffff"
+                      fgColor="#000000"
+                      level="H"
+                      includeMargin={false}
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-[#b0d4ff] text-center break-all px-2">{qrUrl}</p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <button
+                  onClick={handleCopyLink}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition ${copySuccess
                     ? "bg-green-500/20 text-green-400 border border-green-500/40"
                     : "bg-white/5 hover:bg-white/10 text-white border border-white/10"
-                }`}
-              >
-                {copySuccess ? (
-                  <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>Copied!</>
-                ) : (
-                  <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy Link</>
-                )}
-              </button>
+                    }`}
+                >
+                  {copySuccess ? (
+                    <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>Copied!</>
+                  ) : (
+                    <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy Link</>
+                  )}
+                </button>
 
-              <button
-                onClick={handleDownloadPDF}
-                className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium bg-[#38b6ff]/10 hover:bg-[#38b6ff]/20 text-[#38b6ff] border border-[#38b6ff]/30 transition"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                </svg>
-                Download PDF
-              </button>
-            </div>
+                <button
+                  onClick={handleDownloadPDF}
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium bg-[#38b6ff]/10 hover:bg-[#38b6ff]/20 text-[#38b6ff] border border-[#38b6ff]/30 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                  </svg>
+                  Download PDF
+                </button>
+              </div>
 
-            {/* Social share */}
-            <div>
-              <p className="text-xs text-gray-400 mb-3 text-center uppercase tracking-widest">Share to</p>
-              <div className="flex justify-center gap-3">
-                {shareLinks.map((s) => (
-                  <a key={s.name} href={s.href()} target="_blank" rel="noopener noreferrer" title={s.name}
-                    className="w-10 h-10 rounded-full flex items-center justify-center transition hover:scale-110 hover:opacity-90"
-                    style={{ backgroundColor: s.color }}>
-                    <span className="text-white">{s.icon}</span>
-                  </a>
-                ))}
+              {/* Social share */}
+              <div>
+                <p className="text-xs text-gray-400 mb-3 text-center uppercase tracking-widest">Share to</p>
+                <div className="flex justify-center gap-3">
+                  {shareLinks.map((s) => (
+                    <a key={s.name} href={s.href()} target="_blank" rel="noopener noreferrer" title={s.name}
+                      className="w-10 h-10 rounded-full flex items-center justify-center transition hover:scale-110 hover:opacity-90"
+                      style={{ backgroundColor: s.color }}>
+                      <span className="text-white">{s.icon}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

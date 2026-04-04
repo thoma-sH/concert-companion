@@ -9,93 +9,61 @@ export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [concerts, setConcerts] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [newConcert, setNewConcert] = useState({ name: "", date: "", time: "" });
+  const [newConcert, setNewConcert] = useState({ concertName: "", startDate: 0, endDate: 0 });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null); // concert id pending delete confirm
+  async function getConcerts() {
+    let response = await fetch("/api/venue/concert/list");
+    let json_response = await response.json()
+    setConcerts(json_response.data)
+  }
 
-  // Load user & concerts from localStorage (mock)
+
   useEffect(() => {
-    let storedUser = null;
-    if (process.env.NODE_ENV === "development") {
-      const devUser = localStorage.getItem("dev_user");
-      if (devUser) storedUser = JSON.parse(devUser);
-    }
-    if (!storedUser) {
-      const realUser = localStorage.getItem("user");
-      if (realUser) storedUser = JSON.parse(realUser);
-    }
-    if (!storedUser) {
-      router.push("/onboard_page");
-      return;
-    }
-    setUser(storedUser);
 
-    const savedConcerts = localStorage.getItem("concerts");
-    if (savedConcerts) {
-      setConcerts(JSON.parse(savedConcerts));
-    } else {
-      const mockConcerts = [
-        { id: 1, name: "Neon Nights Tour", date: "2025-05-15", time: "20:00", status: "upcoming", viewers: 0, joinLink: "" },
-        { id: 2, name: "Acoustic Sunset", date: "2025-06-10", time: "18:30", status: "upcoming", viewers: 0, joinLink: "" },
-      ];
-      setConcerts(mockConcerts);
-      localStorage.setItem("concerts", JSON.stringify(mockConcerts));
+    async function getUser() {
+      let response = await fetch("/api/venue/me");
+      let json_response = await response.json()
+      if (!json_response.success || !json_response.loggedIn) {
+        router.push("/onboard_page")
+      } else {
+        setUser(json_response)
+        getConcerts();
+      }
     }
+    getUser();
   }, [router]);
 
-  // Save concerts to localStorage whenever they change
-  useEffect(() => {
-    if (concerts.length > 0) {
-      localStorage.setItem("concerts", JSON.stringify(concerts));
-    }
-  }, [concerts]);
-
   const handleLogout = () => {
-    localStorage.removeItem("user");
-    if (process.env.NODE_ENV === "development") localStorage.removeItem("dev_user");
-    router.push("/");
+    fetch("/api/logout").then(() => router.push("/"));
   };
 
   const handleCreateConcert = () => {
-    if (!newConcert.name || !newConcert.date || !newConcert.time) return;
-    const concert = {
-      id: Date.now(),
-      ...newConcert,
-      status: "upcoming",
-      viewers: 0,
-      joinLink: "",
-    };
-    setConcerts([concert, ...concerts]);
-    setShowModal(false);
-    setNewConcert({ name: "", date: "", time: "" });
+    fetch('/api/venue/concert/add', {
+      method: 'POST',
+      body: JSON.stringify({
+        concertName: newConcert.concertName,
+        startDate: new Date(newConcert.startDate).getTime(),
+        endDate: new Date(newConcert.endDate).getTime()
+      })
+    }).then((response) => {
+      getConcerts()
+      setShowModal(false)
+      close
+    })
   };
 
-  // Delete concert + all associated live room data
   const handleDeleteConcert = (concertId) => {
-    // Remove from concerts list
-    const updated = concerts.filter((c) => c.id !== concertId);
-    setConcerts(updated);
-    // If list is now empty, clear the key entirely so the empty state shows
-    if (updated.length === 0) {
-      localStorage.removeItem("concerts");
-    } else {
-      localStorage.setItem("concerts", JSON.stringify(updated));
-    }
-    // Wipe associated live room data
-    localStorage.removeItem(`lightsync_${concertId}`);
-    localStorage.removeItem(`chat_${concertId}`);
-    setConfirmDeleteId(null);
+    fetch('/api/venue/concert/delete', {
+      method: 'POST',
+      body: JSON.stringify({
+        concertId: confirmDeleteId
+      })
+    }).then((response) => {
+      getConcerts()
+      setConfirmDeleteId(null)
+    })
   };
 
-  const handleGoLive = (concertId) => {
-    const updatedConcerts = concerts.map((concert) => {
-      if (concert.id === concertId) {
-        const joinLink = `${window.location.origin}/livefeed?concertId=${concertId}`;
-        return { ...concert, status: "live", joinLink, viewers: Math.floor(Math.random() * 500) + 50 };
-      }
-      return concert;
-    });
-    setConcerts(updatedConcerts);
-  };
 
   const handleManage = (concertId) => {
     router.push(`/manage?concertId=${concertId}`);
@@ -108,10 +76,6 @@ export default function Dashboard() {
       </div>
     );
   }
-
-  const liveCount = concerts.filter((c) => c.status === "live").length;
-  const upcomingCount = concerts.filter((c) => c.status === "upcoming").length;
-  const totalViewers = concerts.reduce((sum, c) => sum + (c.viewers || 0), 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#050d1a] via-[#071628] to-[#0a1f3d]">
@@ -142,22 +106,6 @@ export default function Dashboard() {
       </nav>
 
       <div className="max-w-6xl mx-auto p-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-[#0a1f3d]/40 backdrop-blur-sm rounded-xl p-4 border border-[#38b6ff]/20">
-            <p className="text-[#b0d4ff] text-sm">Live Now</p>
-            <p className="text-3xl font-bold text-white">{liveCount}</p>
-          </div>
-          <div className="bg-[#0a1f3d]/40 backdrop-blur-sm rounded-xl p-4 border border-[#38b6ff]/20">
-            <p className="text-[#b0d4ff] text-sm">Upcoming</p>
-            <p className="text-3xl font-bold text-white">{upcomingCount}</p>
-          </div>
-          <div className="bg-[#0a1f3d]/40 backdrop-blur-sm rounded-xl p-4 border border-[#38b6ff]/20">
-            <p className="text-[#b0d4ff] text-sm">Total Viewers</p>
-            <p className="text-3xl font-bold text-white">{totalViewers.toLocaleString()}</p>
-          </div>
-        </div>
-
         {/* Header + New Concert Button */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-white">Your Concerts</h2>
@@ -178,61 +126,26 @@ export default function Dashboard() {
           ) : (
             concerts.map((concert) => (
               <div
-                key={concert.id}
+                key={concert.concertId}
                 className="bg-[#0a1f3d]/40 backdrop-blur-sm rounded-xl p-4 border border-[#38b6ff]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
               >
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-white font-semibold">{concert.name}</h3>
-                    {concert.status === "live" && (
-                      <span className="flex items-center gap-1 text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-                        </span>
-                        LIVE
-                      </span>
-                    )}
-                    {concert.status === "upcoming" && (
-                      <span className="text-xs bg-[#38b6ff]/20 text-[#38b6ff] px-2 py-0.5 rounded-full">Upcoming</span>
-                    )}
-                    {concert.status === "ended" && (
-                      <span className="text-xs bg-gray-500/20 text-gray-400 px-2 py-0.5 rounded-full">Ended</span>
-                    )}
+                    <h3 className="text-white font-semibold">{concert.ConcertName}</h3>
                   </div>
-                  <p className="text-[#b0d4ff] text-sm">{concert.date} at {concert.time}</p>
-                  {concert.status === "live" && (
-                    <p className="text-xs text-[#38b6ff] mt-1">{concert.viewers} watching now</p>
-                  )}
+                  <p className="text-[#b0d4ff] text-sm">{String(new Date(concert.StartDate))}</p>
                 </div>
 
-                {/* Action buttons */}
                 <div className="flex items-center gap-2">
-                  {concert.status === "upcoming" && (
-                    <button
-                      onClick={() => handleGoLive(concert.id)}
-                      className="px-4 py-1.5 rounded-full bg-[#38b6ff]/20 text-[#38b6ff] text-sm hover:bg-[#38b6ff]/30 transition"
-                    >
-                      Go Live
-                    </button>
-                  )}
-                  {concert.status === "live" && (
-                    <button
-                      onClick={() => handleManage(concert.id)}
-                      className="px-4 py-1.5 rounded-full border border-[#38b6ff]/50 text-[#38b6ff] text-sm hover:bg-[#38b6ff]/10 transition"
-                    >
-                      Manage
-                    </button>
-                  )}
-                  {concert.status === "ended" && (
-                    <button className="px-4 py-1.5 rounded-full border border-gray-500/50 text-gray-400 text-sm hover:bg-gray-500/10 transition">
-                      View Recap
-                    </button>
-                  )}
-
-                  {/* Delete button */}
                   <button
-                    onClick={() => setConfirmDeleteId(concert.id)}
+                    onClick={() => handleManage(concert.idConcert)}
+                    className="px-4 py-1.5 rounded-full border border-[#38b6ff]/50 text-[#38b6ff] text-sm hover:bg-[#38b6ff]/10 transition"
+                  >
+                    Manage
+                  </button>
+
+                  <button
+                    onClick={() => setConfirmDeleteId(concert.idConcert)}
                     className="p-1.5 rounded-full text-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition"
                     title="Delete concert"
                   >
@@ -256,20 +169,20 @@ export default function Dashboard() {
               <input
                 type="text"
                 placeholder="Concert name"
-                value={newConcert.name}
-                onChange={(e) => setNewConcert({ ...newConcert, name: e.target.value })}
+                value={newConcert.concertName}
+                onChange={(e) => setNewConcert({ ...newConcert, concertName: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg bg-[#071628] border border-[#38b6ff]/30 text-white focus:outline-none focus:border-[#38b6ff]"
               />
-              <input
-                type="date"
-                value={newConcert.date}
-                onChange={(e) => setNewConcert({ ...newConcert, date: e.target.value })}
+              <p>start</p><input
+                type="datetime-local"
+                value={newConcert.startDate}
+                onChange={(e) => setNewConcert({ ...newConcert, startDate: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg bg-[#071628] border border-[#38b6ff]/30 text-white focus:outline-none focus:border-[#38b6ff]"
               />
-              <input
-                type="time"
-                value={newConcert.time}
-                onChange={(e) => setNewConcert({ ...newConcert, time: e.target.value })}
+              <p>end</p><input
+                type="datetime-local"
+                value={newConcert.endDate}
+                onChange={(e) => setNewConcert({ ...newConcert, endDate: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg bg-[#071628] border border-[#38b6ff]/30 text-white focus:outline-none focus:border-[#38b6ff]"
               />
             </div>
