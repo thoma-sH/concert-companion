@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Script from "next/script";
 import { useSearchParams } from "next/navigation";
 
-// ── Constants ──────────────────────────────────────────────────────────────
 const COLORS = [
   "#007EA7", "#2A9D8F", "#005F7F", "#4db8aa",
   "#FF331F", "#cc2010", "#ff6652",
@@ -24,7 +23,6 @@ const REPORT_PIN_LIKES = 5;
 const ADMIN_NOTES_KEY = "admin_notes";
 const ADMIN_NOTE_DURATION = 10 * 60 * 1000;
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
 function tokenize(str) {
   return str
     .toLowerCase()
@@ -46,7 +44,6 @@ function randColor(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
 export default function ConcertCompanion() {
   const [posts, setPosts] = useState([]);
   const [adminNotes, setAdminNotes] = useState([]);
@@ -68,20 +65,19 @@ export default function ConcertCompanion() {
   const rptRef = useRef(null);
   const searchParams = useSearchParams();
 
-
   function fetchMessages() {
     fetch("/api/chat/get?concertId=" + searchParams.get("concertId")).then(async (response) => {
-      let json_response = await response.json()
+      let json_response = await response.json();
       if (json_response.success) {
-        setPosts(json_response.data)
+        setPosts(json_response.data);
       }
-    })
+    });
   }
 
   useEffect(() => {
-    setInterval(fetchMessages, 500)
-  }, [])
-  // ── Stable visualizer bars (randomised once) ────────────────────────────
+    setInterval(fetchMessages, 500);
+  }, []);
+
   const visBars = useMemo(
     () =>
       Array.from({ length: 28 }, (_, i) => ({
@@ -94,7 +90,6 @@ export default function ConcertCompanion() {
     []
   );
 
-  // ── Admin notes (localStorage) ──────────────────────────────────────────
   const loadAdminNotes = useCallback(() => {
     try {
       const raw = localStorage.getItem(ADMIN_NOTES_KEY);
@@ -113,8 +108,6 @@ export default function ConcertCompanion() {
   useEffect(() => {
     loadAdminNotes();
     const tick = setInterval(loadAdminNotes, 10_000);
-
-    // Seed a demo note if none exist
     try {
       const raw = localStorage.getItem(ADMIN_NOTES_KEY);
       if (!raw || JSON.parse(raw).length === 0) {
@@ -159,17 +152,13 @@ export default function ConcertCompanion() {
     setAdminNotes(next);
   }
 
-  // Expose for console / admin panel usage
   useEffect(() => { window.addAdminNote = addAdminNote; }, [adminNotes]);
 
-  // ── Auto-focus inputs ───────────────────────────────────────────────────
   useEffect(() => { if (composeOpen) setTimeout(() => msgRef.current?.focus(), 50); }, [composeOpen]);
   useEffect(() => { if (reportOpen) setTimeout(() => rptRef.current?.focus(), 50); }, [reportOpen]);
 
-  // ── ID generator ────────────────────────────────────────────────────────
   function uid() { return nextId.current++; }
 
-  // ── Expire NEW badge after 10 s ─────────────────────────────────────────
   function expireBadge(id) {
     setTimeout(
       () => setPosts((p) => p.map((x) => (x.id === id ? { ...x, isNew: false } : x))),
@@ -177,24 +166,18 @@ export default function ConcertCompanion() {
     );
   }
 
-  // ── Like toggle ─────────────────────────────────────────────────────────
   function toggleLike(postId) {
     if (posts.filter((p) => p.idChatMessage == postId)[0].hasUpvoted) {
       fetch("/api/chat/unheart", {
-        method: "POST", body: JSON.stringify({
-          "messageId": postId
-        })
-      })
+        method: "POST", body: JSON.stringify({ messageId: postId })
+      });
     } else {
       fetch("/api/chat/heart", {
-        method: "POST", body: JSON.stringify({
-          "messageId": postId
-        })
-      })
+        method: "POST", body: JSON.stringify({ messageId: postId })
+      });
     }
   }
 
-  // ── Add post ────────────────────────────────────────────────────────────
   function addPost(fields) {
     const id = uid();
     setPosts((prev) => [
@@ -216,7 +199,6 @@ export default function ConcertCompanion() {
     expireBadge(id);
   }
 
-  // ── Report / similarity ─────────────────────────────────────────────────
   function submitReport(text) {
     const bucket = reportBuckets.current.find(
       (b) => similarity(text, b.canonical) >= SIMILARITY_THRESHOLD
@@ -251,7 +233,6 @@ export default function ConcertCompanion() {
     }
   }
 
-  // ── Compose / report helpers ────────────────────────────────────────────
   function closeCompose() { setComposeOpen(false); setGifPickerOpen(false); }
   function closeReport() { setReportOpen(false); }
 
@@ -262,7 +243,7 @@ export default function ConcertCompanion() {
         concertId: searchParams.get("concertId"),
         messageData: messageInput
       })
-    })
+    });
     setMessageInput("");
     closeCompose();
   }
@@ -280,7 +261,6 @@ export default function ConcertCompanion() {
     closeCompose();
   }
 
-  // ── Camera ──────────────────────────────────────────────────────────────
   async function openCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -313,23 +293,26 @@ export default function ConcertCompanion() {
     closeCamera();
   }
 
-  // ── Light show ──────────────────────────────────────────────────────────
   function openLightShow() {
     setLightshowOpen(true);
     setLightBg(randColor(LIGHT_SHOW_COLORS));
-    lightInterval.current = setInterval(
-      async () => {
-        let resp = await fetch("/api/concertColor")
-        let json_resp = await resp.json()
+    const concertId = searchParams.get("concertId");
+    lightInterval.current = setInterval(async () => {
+      try {
+        const resp = await fetch("/api/concertColor?concertId=" + concertId);
+        const json_resp = await resp.json();
         if (json_resp.success) {
-          let r = (color_code >> 16) & 0xFF;
-          let g = (color_code >> 8) & 0xFF;
-          let b = color_code & 0xFF;
-          let cssColor = `rgb(${r}, ${g}, ${b})`;
+          const color_code = json_resp.color;
+          const r = (color_code >> 16) & 0xFF;
+          const g = (color_code >> 8) & 0xFF;
+          const b = color_code & 0xFF;
+          const cssColor = `rgb(${r}, ${g}, ${b})`;
+          setLightBg(cssColor);
         }
-      },
-      200
-    );
+      } catch (e) {
+        console.error("Light show fetch error:", e);
+      }
+    }, 200);
   }
 
   function closeLightShow() {
@@ -338,13 +321,11 @@ export default function ConcertCompanion() {
     lightInterval.current = null;
   }
 
-  // ── Sort: pinned reports float to top ───────────────────────────────────
   const sortedPosts = useMemo(
     () => [...posts].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)),
     [posts]
   );
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <>
       <style>{STYLES}</style>
@@ -352,7 +333,6 @@ export default function ConcertCompanion() {
 
       <div className="app">
 
-        {/* ── Header ── */}
         <div className="header">
           <div className="header-top">
             <div>
@@ -368,7 +348,6 @@ export default function ConcertCompanion() {
             <h1 className="festival-name">Concert Companion</h1>
           </div>
 
-          {/* Visualizer */}
           <div
             className="visualizer"
             style={{ cursor: "pointer" }}
@@ -389,10 +368,8 @@ export default function ConcertCompanion() {
           </div>
         </div>
 
-        {/* ── Feed ── */}
         <div className="feed">
 
-          {/* Admin notes slot */}
           <div id="admin-notes-slot">
             {adminNotes.map((note) => (
               <div key={note.id} className="post admin-post">
@@ -417,10 +394,9 @@ export default function ConcertCompanion() {
             ))}
           </div>
 
-          {/* Regular + report posts */}
           {sortedPosts.map((post) => (
             <div
-              key={post.id}
+              key={post.idChatMessage}
               className={[
                 "post",
                 post.Type == 2 ? "is-report" : "",
@@ -470,9 +446,7 @@ export default function ConcertCompanion() {
           ))}
         </div>
 
-        {/* ── Bottom bar ── */}
         <div className="bottom-bar">
-          {/* Lights button — fixed to left edge */}
           <button className="lights-btn" onClick={openLightShow}>
             <span className="lights-btn__label">
               join the<br />
@@ -480,7 +454,6 @@ export default function ConcertCompanion() {
             </span>
           </button>
 
-          {/* Right cluster: compose + report */}
           <div className="smallContainer">
             <button
               className={`nav-btn nav-btn--center${composeOpen ? " open" : ""}`}
@@ -502,7 +475,6 @@ export default function ConcertCompanion() {
                 setReportOpen((o) => !o);
               }}
             >
-              {/* lordicon loads after hydration */}
               <lord-icon
                 src="https://cdn.lordicon.com/lltgvngb.json"
                 trigger="loop"
@@ -515,13 +487,8 @@ export default function ConcertCompanion() {
           </div>
         </div>
 
-        {/* ── Compose overlay ── */}
         {composeOpen && (
-          <div
-            className="compose-overlay open"
-            onClick={closeCompose}
-          >
-            {/* GIF picker */}
+          <div className="compose-overlay open" onClick={closeCompose}>
             {gifPickerOpen && (
               <div className="gif-picker open" onClick={(e) => e.stopPropagation()}>
                 <div className="gif-grid">
@@ -538,7 +505,6 @@ export default function ConcertCompanion() {
               </div>
             )}
 
-            {/* Compose panel */}
             <div className="compose-panel" onClick={(e) => e.stopPropagation()}>
               <button className="cam-btn" onClick={openCamera}>
                 <lord-icon
@@ -572,7 +538,6 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* ── Report overlay ── */}
         {reportOpen && (
           <div className="report-overlay open" onClick={closeReport}>
             <div className="report-panel" onClick={(e) => e.stopPropagation()}>
@@ -592,29 +557,29 @@ export default function ConcertCompanion() {
           </div>
         )}
 
-        {/* ── Camera overlay ── */}
         {cameraOpen && (
           <div className="camera-overlay open">
             <video ref={videoRef} autoPlay playsInline />
             <div className="camera-controls">
               <button className="camera-close-btn" onClick={closeCamera}>✕</button>
-              <button className="camera-snap-btn" onClick={snapPhoto}>      <lord-icon
-                src="https://cdn.lordicon.com/wsaaegar.json"
-                trigger="loop"
-                delay="500"
-                stroke="bold"
-                colors="primary:#30c9e8,secondary:#16a9c7"
-                style={{ width: 32, height: 32 }}
-              /></button>
+              <button className="camera-snap-btn" onClick={snapPhoto}>
+                <lord-icon
+                  src="https://cdn.lordicon.com/wsaaegar.json"
+                  trigger="loop"
+                  delay="500"
+                  stroke="bold"
+                  colors="primary:#30c9e8,secondary:#16a9c7"
+                  style={{ width: 32, height: 32 }}
+                />
+              </button>
             </div>
           </div>
         )}
 
-        {/* ── Light show overlay ── */}
         {lightshowOpen && (
           <div
             className="lightshow-overlay open"
-            style={{ backgroundColor: lightBg }}
+            style={{ backgroundColor: lightBg, transition: "background-color 0.2s ease" }}
             onClick={closeLightShow}
           >
             <span className="lightshow-tap-hint">tap to close</span>
@@ -625,7 +590,6 @@ export default function ConcertCompanion() {
   );
 }
 
-// ── All styles (faithful port of styles.css) ─────────────────────────────────
 const STYLES = `
   :root {
     --bg:          #0a0a12;
@@ -655,7 +619,6 @@ const STYLES = `
     justify-content: center;
   }
 
-  /* ── App shell ── */
   .app {
     width: 100%;
     max-width: 400px;
@@ -667,7 +630,6 @@ const STYLES = `
     margin: 0 auto;
   }
 
-  /* ── Header ── */
   .header { padding: 20px 16px 0; background: var(--bg); }
   .header-top {
     display: flex;
@@ -703,7 +665,6 @@ const STYLES = `
     color: var(--accent-pale);
   }
 
-  /* ── Visualizer ── */
   .visualizer { display: flex; align-items: flex-end; gap: 3px; padding: 0 2px; }
   .vis-bar {
     flex: 1;
@@ -713,7 +674,6 @@ const STYLES = `
   }
   @keyframes bounce { from { transform: scaleY(0.15); } to { transform: scaleY(1); } }
 
-  /* ── Feed ── */
   .feed {
     flex: 1;
     padding: 12px;
@@ -724,7 +684,6 @@ const STYLES = `
     padding-bottom: 110px;
   }
 
-  /* ── Post cards ── */
   .post {
     background: var(--surface);
     border: 1px solid var(--surface-2);
@@ -765,7 +724,6 @@ const STYLES = `
   .like-count { font-size: 13px; }
   .report-count { font-size: 11px; color: var(--subtle); }
 
-  /* Report posts */
   .post.is-report {
     border-color: #FF331F44;
     background: color-mix(in srgb, var(--surface) 85%, #FF331F 15%);
@@ -784,7 +742,6 @@ const STYLES = `
     color: #FF331F; margin-bottom: 8px;
   }
 
-  /* ── Admin notes slot ── */
   #admin-notes-slot { display: flex; flex-direction: column; gap: 10px; }
 
   .post.admin-post {
@@ -809,7 +766,6 @@ const STYLES = `
   }
   .admin-dismiss-btn:hover { background: rgba(202,138,4,0.2); }
 
-  /* ── Bottom bar ── */
   .bottom-bar {
     position: fixed; bottom: 0;
     left: 50%; transform: translateX(-50%);
@@ -822,7 +778,6 @@ const STYLES = `
     justify-content: space-between;
   }
 
-  /* Lights button */
   .lights-btn {
     position: fixed; bottom: 0; left: 0;
     width: 135px; height: 80px;
@@ -861,7 +816,6 @@ const STYLES = `
     100% { background-position: 0% 50%; }
   }
 
-  /* Nav buttons */
   .nav-btn {
     width: 76px; height: 76px;
     border-radius: 50%;
@@ -899,7 +853,6 @@ const STYLES = `
     align-items: center;
   }
 
-  /* ── Compose overlay ── */
   .compose-overlay { display: none; position: fixed; inset: 0; z-index: 20; }
   .compose-overlay.open { display: block; }
 
@@ -964,7 +917,6 @@ const STYLES = `
     color: var(--white);
   }
 
-  /* ── GIF picker ── */
   .gif-picker {
     display: none;
     position: absolute;
@@ -989,7 +941,6 @@ const STYLES = `
     transform: scale(0.96);
   }
 
-  /* ── Report overlay ── */
   .report-overlay { display: none; position: fixed; inset: 0; z-index: 20; }
   .report-overlay.open { display: block; }
 
@@ -1027,7 +978,6 @@ const STYLES = `
   }
   .report-send-btn:active { background: #cc2010; }
 
-  /* ── Camera overlay ── */
   .camera-overlay {
     display: none; position: fixed; inset: 0; z-index: 30;
     background: rgba(0,0,0,0.85);
@@ -1057,11 +1007,9 @@ const STYLES = `
     display: flex; align-items: center; justify-content: center;
   }
 
-  /* ── Light show overlay ── */
   .lightshow-overlay {
     display: none; position: fixed; inset: 0; z-index: 100;
     cursor: pointer;
-    transition: background-color 0.4s ease;
     align-items: center; justify-content: center;
     flex-direction: column; gap: 16px;
   }
