@@ -149,7 +149,7 @@ export default function Home() {
       </main>
 
       <footer style={styles.footer}>
-        <span style={styles.footerText}>STAGEFRONT &mdash; Live Concert Platform</span>
+        <span style={styles.footerText}>Concert Companion &mdash; Live Concert Platform</span>
       </footer>
 
       <style>{`

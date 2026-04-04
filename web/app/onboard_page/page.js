@@ -106,7 +106,7 @@ export default function OnboardPage() {
           {activeTab === "signup" ? "Create an account" : "Welcome back"}
         </h1>
         <p className="text-[#b0d4ff] text-sm mb-6">
-          {activeTab === "signup" ? "Join Stagefront to create and manage concerts" : "Sign in to access your dashboard"}
+          {activeTab === "signup" ? "Join Concert Companion to create and manage concerts" : "Sign in to access your dashboard"}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
