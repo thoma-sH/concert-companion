@@ -297,6 +297,9 @@ export default function ConcertCompanion() {
     setLightshowOpen(true);
     setLightBg(randColor(LIGHT_SHOW_COLORS));
     const concertId = searchParams.get("concertId");
+
+    // ─── Poll at 100ms to stay in tight sync with the manage page's
+    //     effect intervals (breath: 100ms, rainbow: 80ms).
     lightInterval.current = setInterval(async () => {
       try {
         const resp = await fetch("/api/concertColor?concertId=" + concertId);
@@ -312,7 +315,7 @@ export default function ConcertCompanion() {
       } catch (e) {
         console.error("Light show fetch error:", e);
       }
-    }, 200);
+    }, 100); // ← was 200ms; halved so attendees don't lag a full cycle behind
   }
 
   function closeLightShow() {
@@ -579,7 +582,7 @@ export default function ConcertCompanion() {
         {lightshowOpen && (
           <div
             className="lightshow-overlay open"
-            style={{ backgroundColor: lightBg, transition: "background-color 0.2s ease" }}
+            style={{ backgroundColor: lightBg, transition: "background-color 0.1s ease" }}
             onClick={closeLightShow}
           >
             <span className="lightshow-tap-hint">tap to close</span>

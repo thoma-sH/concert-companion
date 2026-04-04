@@ -108,7 +108,9 @@ export default function ManagePage() {
     setInterval(fetchMessages, 250);
   }, [concertId]);
 
-  function pushColorToServer(cssColor) {
+  // ─── Direct send: no debounce. Used inside effect intervals which are
+  //     already rate-limited by their own setInterval cadence.
+  function sendColorNow(cssColor) {
     if (!concertId) return;
     const canvas = document.createElement("canvas");
     canvas.width = 1;
@@ -118,14 +120,19 @@ export default function ManagePage() {
     ctx.fillRect(0, 0, 1, 1);
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
     const colorInt = (r << 16) | (g << 8) | b;
+    fetch("/api/venue/concert/setcolor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ concertId, color: colorInt }),
+    });
+  }
+
+  // ─── Debounced send: used for slider/picker interactions so we don't
+  //     flood the server on every pixel of drag movement.
+  function pushColorToServer(cssColor) {
+    if (!concertId) return;
     if (sendTimeout.current) clearTimeout(sendTimeout.current);
-    sendTimeout.current = setTimeout(() => {
-      fetch("/api/venue/concert/setcolor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concertId, color: colorInt }),
-      });
-    }, 100);
+    sendTimeout.current = setTimeout(() => sendColorNow(cssColor), 100);
   }
 
   function applyBrightness(hex, percent) {
@@ -155,7 +162,7 @@ export default function ManagePage() {
         const f = (0.1 + intensity * 0.9) * (brightness / 100);
         const color = `rgb(${Math.min(255, Math.floor(r * f))}, ${Math.min(255, Math.floor(g * f))}, ${Math.min(255, Math.floor(b * f))})`;
         setPreviewColor(color);
-        pushColorToServer(color);
+        sendColorNow(color); // ← direct send: interval is 100ms so debounce would swallow every update
         step++;
       }, 100);
     } else if (type === "rainbow") {
@@ -163,7 +170,7 @@ export default function ManagePage() {
       effectRef.current = setInterval(() => {
         const color = `hsl(${hue}, 100%, 50%)`;
         setPreviewColor(color);
-        pushColorToServer(color);
+        sendColorNow(color); // ← direct send: interval is 80ms so debounce would swallow every update
         hue = (hue + 4 * effectSpeed) % 360;
       }, 80);
     }
@@ -174,7 +181,7 @@ export default function ManagePage() {
     else {
       const color = applyBrightness(baseColor, brightness);
       setPreviewColor(color);
-      pushColorToServer(color);
+      pushColorToServer(color); // ← debounced: triggered by slider/picker drag
     }
     return () => { if (effectRef.current) clearInterval(effectRef.current); };
   }, [baseColor, brightness, effectSpeed]);
