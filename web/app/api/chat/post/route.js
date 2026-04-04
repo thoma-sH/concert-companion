@@ -6,8 +6,9 @@ import pool from "../../lib/db";
 const messageTypes = {
     "message": 0,
     "image": 1,
-    "report": 2,
-    "announcement": 3
+    "gif": 4,
+    "announcement": 30,
+    "report": 20,
 }
 
 

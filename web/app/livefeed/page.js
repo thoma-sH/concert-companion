@@ -1,44 +1,27 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Script from "next/script";
-
-// ── Map a DB chat row to the post shape used in the feed ───────────────────
-function dbRowToPost(row) {
-  return {
-    id:          row.idChatMessage,
-    username:    row.Username || "anonymous",
-    timestamp:   new Date(row.Sent).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    text:        row.Message || "",
-    likes:       row.UpvoteCount || 0,
-    liked:       row.hasUpvoted === 1,
-    isNew:       false,
-    isReport:    row.Type === 2,
-    isAdmin:     row.Type === 3,
-    reportCount: 1,
-    pinned:      false,
-  };
-}
+import { useSearchParams } from "next/navigation";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const COLORS = [
-  "#007EA7","#2A9D8F","#005F7F","#4db8aa",
-  "#FF331F","#cc2010","#ff6652",
-  "#01295F","#003249","#00a8cc",
+  "#007EA7", "#2A9D8F", "#005F7F", "#4db8aa",
+  "#FF331F", "#cc2010", "#ff6652",
+  "#01295F", "#003249", "#00a8cc",
 ];
 const LIGHT_SHOW_COLORS = [
-  "#007EA7","#2A9D8F","#005F7F","#4db8aa",
-  "#FF331F","#cc2010","#01295F","#00a8cc",
+  "#007EA7", "#2A9D8F", "#005F7F", "#4db8aa",
+  "#FF331F", "#cc2010", "#01295F", "#00a8cc",
 ];
 const STOP_WORDS = new Set([
-  "the","a","an","is","it","in","on","at","to","of","and","or","but",
-  "this","that","was","were","i","my","we","they","he","she","so","are",
-  "for","with","not","its","be","has","had","have",
+  "the", "a", "an", "is", "it", "in", "on", "at", "to", "of", "and", "or", "but",
+  "this", "that", "was", "were", "i", "my", "we", "they", "he", "she", "so", "are",
+  "for", "with", "not", "its", "be", "has", "had", "have",
 ]);
 const SIMILARITY_THRESHOLD = 0.60;
-const REPORT_PIN_LIKES    = 5;
-const ADMIN_NOTES_KEY     = "admin_notes";
+const REPORT_PIN_LIKES = 5;
+const ADMIN_NOTES_KEY = "admin_notes";
 const ADMIN_NOTE_DURATION = 10 * 60 * 1000;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -63,48 +46,47 @@ function randColor(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// ── Seed posts ───────────────────────────────────────────────────────────────
-const SEED_POSTS = [
-  { id: 1, username: "maria_j", timestamp: "just now", text: "the stage setup is INSANE tonight omg",                   likes: 4,  liked: false, isNew: true,  isReport: false, isAdmin: false, reportCount: 1, pinned: false },
-  { id: 2, username: "kyle.r",  timestamp: "1m ago",   text: "section 104 has the best view fr",                        likes: 4,  liked: false, isNew: false, isReport: false, isAdmin: false, reportCount: 1, pinned: false },
-  { id: 3, username: "sofi.a",  timestamp: "2m ago",   text: "the crowd energy right now 🔥🔥🔥",                      likes: 9,  liked: false, isNew: false, isReport: false, isAdmin: false, reportCount: 1, pinned: false },
-  { id: 4, username: "dan.l",   timestamp: "4m ago",   text: "security was super smooth tonight, got in under 10 mins", likes: 2,  liked: false, isNew: false, isReport: false, isAdmin: false, reportCount: 1, pinned: false },
-];
-
 // ── Component ────────────────────────────────────────────────────────────────
-function ConcertCompanionInner() {
-  const searchParams = useSearchParams();
-  const concertId    = searchParams.get("concertId");
+export default function ConcertCompanion() {
+  const [posts, setPosts] = useState([]);
+  const [adminNotes, setAdminNotes] = useState([]);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [lightshowOpen, setLightshowOpen] = useState(false);
+  const [lightBg, setLightBg] = useState("");
+  const [messageInput, setMessageInput] = useState("");
+  const [reportInput, setReportInput] = useState("");
 
-  const [posts,          setPosts]         = useState(SEED_POSTS);
-  const [adminNotes,     setAdminNotes]    = useState([]);
-  const [composeOpen,    setComposeOpen]   = useState(false);
-  const [gifPickerOpen,  setGifPickerOpen] = useState(false);
-  const [reportOpen,     setReportOpen]    = useState(false);
-  const [cameraOpen,     setCameraOpen]    = useState(false);
-  const [lightshowOpen,  setLightshowOpen] = useState(false);
-  const [lightBg,        setLightBg]       = useState("");
-  const [messageInput,   setMessageInput]  = useState("");
-  const [reportInput,    setReportInput]   = useState("");
-  const [currentUser,    setCurrentUser]   = useState("you");
-  const [currentUserId,  setCurrentUserId] = useState(null);
-  const [concertName,    setConcertName]   = useState("Concert");
-  const [attendeeCount,  setAttendeeCount] = useState(null);
-
-  const nextId        = useRef(10);
+  const nextId = useRef(10);
   const reportBuckets = useRef([]);
   const lightInterval = useRef(null);
-  const cameraStream  = useRef(null);
-  const videoRef      = useRef(null);
-  const msgRef        = useRef(null);
-  const rptRef        = useRef(null);
+  const cameraStream = useRef(null);
+  const videoRef = useRef(null);
+  const msgRef = useRef(null);
+  const rptRef = useRef(null);
+  const searchParams = useSearchParams();
 
+
+  function fetchMessages() {
+    fetch("/api/chat/get?concertId=" + searchParams.get("concertId")).then(async (response) => {
+      let json_response = await response.json()
+      if (json_response.success) {
+        setPosts(json_response.data)
+      }
+    })
+  }
+
+  useEffect(() => {
+    setInterval(fetchMessages, 500)
+  }, [])
   // ── Stable visualizer bars (randomised once) ────────────────────────────
   const visBars = useMemo(
     () =>
       Array.from({ length: 28 }, (_, i) => ({
-        id:  i,
-        h:   Math.random() * 36 + 12,
+        id: i,
+        h: Math.random() * 36 + 12,
         dur: (Math.random() * 0.6 + 0.5).toFixed(2),
         col: randColor(COLORS),
         del: (Math.random() * 0.4).toFixed(2),
@@ -112,61 +94,12 @@ function ConcertCompanionInner() {
     []
   );
 
-  // ── Load user session (set by /api/user/login cookie + localStorage) ────
-  useEffect(() => {
-    // Username is stored in localStorage by the onboarding page
-    try {
-      const stored = localStorage.getItem("concert_user");
-      if (stored) {
-        const u = JSON.parse(stored);
-        setCurrentUser(u.username || "you");
-        setCurrentUserId(u.userId || null);
-      }
-    } catch {}
-  }, []);
-
-  // ── Fetch concert info (name) once on mount ───────────────────────────────
-  useEffect(() => {
-    if (!concertId) return;
-    fetch(`/api/concert/${concertId}`)
-      .then(r => r.json())
-      .then(data => { if (data.success) setConcertName(data.ConcertName); })
-      .catch(() => {});
-  }, [concertId]);
-
-  // ── Poll real messages from the DB every 5 seconds ───────────────────────
-  const pollMessages = useCallback(async () => {
-    if (!concertId) return;
-    try {
-      const res  = await fetch(`/api/chat/get?concertId=${concertId}`);
-      const data = await res.json();
-      if (!data.success) return;
-      // Update attendee count from DB response
-      setAttendeeCount(data.count ?? null);
-      // Replace the feed with real DB rows (keeps local optimistic posts on top)
-      setPosts(prev => {
-        const dbPosts   = data.data.map(dbRowToPost).reverse(); // newest first
-        const localOnly = prev.filter(p => p.id >= 1000);       // optimistic local posts
-        // Merge: local-only posts stay on top, db posts fill the rest
-        const dbIds = new Set(dbPosts.map(p => p.id));
-        const merged = [...localOnly.filter(p => !dbIds.has(p.id)), ...dbPosts];
-        return merged;
-      });
-    } catch {}
-  }, [concertId]);
-
-  useEffect(() => {
-    pollMessages();
-    const tick = setInterval(pollMessages, 5000);
-    return () => clearInterval(tick);
-  }, [pollMessages]);
-
   // ── Admin notes (localStorage) ──────────────────────────────────────────
   const loadAdminNotes = useCallback(() => {
     try {
-      const raw   = localStorage.getItem(ADMIN_NOTES_KEY);
+      const raw = localStorage.getItem(ADMIN_NOTES_KEY);
       const notes = raw ? JSON.parse(raw) : [];
-      const now   = Date.now();
+      const now = Date.now();
       const valid = notes.filter((n) => n.expiresAt > now);
       if (valid.length !== notes.length) {
         localStorage.setItem(ADMIN_NOTES_KEY, JSON.stringify(valid));
@@ -186,15 +119,15 @@ function ConcertCompanionInner() {
       const raw = localStorage.getItem(ADMIN_NOTES_KEY);
       if (!raw || JSON.parse(raw).length === 0) {
         const note = {
-          id:        Date.now().toString(),
-          message:   "Stage update: Main stage is getting packed!",
+          id: Date.now().toString(),
+          message: "Stage update: Main stage is getting packed!",
           createdAt: Date.now(),
           expiresAt: Date.now() + ADMIN_NOTE_DURATION,
         };
         localStorage.setItem(ADMIN_NOTES_KEY, JSON.stringify([note]));
         setAdminNotes([note]);
       }
-    } catch {}
+    } catch { }
 
     const onStorage = () => loadAdminNotes();
     window.addEventListener("storage", onStorage);
@@ -206,7 +139,7 @@ function ConcertCompanionInner() {
 
   function addAdminNote(message) {
     const note = {
-      id:        Date.now().toString(),
+      id: Date.now().toString(),
       message,
       createdAt: Date.now(),
       expiresAt: Date.now() + ADMIN_NOTE_DURATION,
@@ -231,7 +164,7 @@ function ConcertCompanionInner() {
 
   // ── Auto-focus inputs ───────────────────────────────────────────────────
   useEffect(() => { if (composeOpen) setTimeout(() => msgRef.current?.focus(), 50); }, [composeOpen]);
-  useEffect(() => { if (reportOpen)  setTimeout(() => rptRef.current?.focus(), 50); }, [reportOpen]);
+  useEffect(() => { if (reportOpen) setTimeout(() => rptRef.current?.focus(), 50); }, [reportOpen]);
 
   // ── ID generator ────────────────────────────────────────────────────────
   function uid() { return nextId.current++; }
@@ -246,15 +179,19 @@ function ConcertCompanionInner() {
 
   // ── Like toggle ─────────────────────────────────────────────────────────
   function toggleLike(postId) {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id !== postId) return p;
-        const liked  = !p.liked;
-        const likes  = p.likes + (liked ? 1 : -1);
-        const pinned = p.isReport && likes >= REPORT_PIN_LIKES ? true : p.pinned;
-        return { ...p, liked, likes, pinned };
+    if (posts.filter((p) => p.idChatMessage == postId)[0].hasUpvoted) {
+      fetch("/api/chat/unheart", {
+        method: "POST", body: JSON.stringify({
+          "messageId": postId
+        })
       })
-    );
+    } else {
+      fetch("/api/chat/heart", {
+        method: "POST", body: JSON.stringify({
+          "messageId": postId
+        })
+      })
+    }
   }
 
   // ── Add post ────────────────────────────────────────────────────────────
@@ -263,15 +200,15 @@ function ConcertCompanionInner() {
     setPosts((prev) => [
       {
         id,
-        username:    currentUser,
-        timestamp:   "just now",
-        likes:       0,
-        liked:       false,
-        isNew:       true,
-        isReport:    false,
-        isAdmin:     false,
+        username: "you",
+        timestamp: "just now",
+        likes: 0,
+        liked: false,
+        isNew: true,
+        isReport: false,
+        isAdmin: false,
         reportCount: 1,
-        pinned:      false,
+        pinned: false,
         ...fields,
       },
       ...prev,
@@ -296,16 +233,16 @@ function ConcertCompanionInner() {
       setPosts((prev) => [
         {
           id,
-          username:    currentUser,
-          timestamp:   "just now",
+          username: "you",
+          timestamp: "just now",
           text,
-          likes:       0,
-          liked:       false,
-          isNew:       true,
-          isReport:    true,
-          isAdmin:     false,
+          likes: 0,
+          liked: false,
+          isNew: true,
+          isReport: true,
+          isAdmin: false,
           reportCount: 1,
-          pinned:      false,
+          pinned: false,
         },
         ...prev,
       ]);
@@ -316,39 +253,26 @@ function ConcertCompanionInner() {
 
   // ── Compose / report helpers ────────────────────────────────────────────
   function closeCompose() { setComposeOpen(false); setGifPickerOpen(false); }
-  function closeReport()  { setReportOpen(false); }
+  function closeReport() { setReportOpen(false); }
 
-  async function sendMessage() {
-    const text = messageInput.trim();
-    if (!text) return;
-    // Optimistic UI — show immediately
-    addPost({ text });
+  function sendMessage() {
+    fetch("/api/chat/post", {
+      method: "POST", body: JSON.stringify({
+        messageType: "message",
+        concertId: searchParams.get("concertId"),
+        messageData: messageInput
+      })
+    })
     setMessageInput("");
     closeCompose();
-    // Persist to DB (fire-and-forget; next poll will confirm)
-    if (concertId) {
-      fetch("/api/chat/post", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ concertId, messageData: text, messageType: "message" }),
-      }).catch(() => {});
-    }
   }
 
-  async function sendReport() {
+  function sendReport() {
     const text = reportInput.trim();
     if (!text) return;
     submitReport(text);
     setReportInput("");
     closeReport();
-    // Persist report to DB
-    if (concertId) {
-      fetch("/api/chat/post", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ concertId, messageData: text, messageType: "report" }),
-      }).catch(() => {});
-    }
   }
 
   function postGif(src) {
@@ -381,9 +305,9 @@ function ConcertCompanionInner() {
   function snapPhoto() {
     const video = videoRef.current;
     if (!video) return;
-    const canvas   = document.createElement("canvas");
-    canvas.width   = video.videoWidth;
-    canvas.height  = video.videoHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
     addPost({ text: "", photoSrc: canvas.toDataURL("image/jpeg") });
     closeCamera();
@@ -394,8 +318,17 @@ function ConcertCompanionInner() {
     setLightshowOpen(true);
     setLightBg(randColor(LIGHT_SHOW_COLORS));
     lightInterval.current = setInterval(
-      () => setLightBg(randColor(LIGHT_SHOW_COLORS)),
-      800
+      async () => {
+        let resp = await fetch("/api/concertColor")
+        let json_resp = await resp.json()
+        if (json_resp.success) {
+          let r = (color_code >> 16) & 0xFF;
+          let g = (color_code >> 8) & 0xFF;
+          let b = color_code & 0xFF;
+          let cssColor = `rgb(${r}, ${g}, ${b})`;
+        }
+      },
+      200
     );
   }
 
@@ -424,14 +357,12 @@ function ConcertCompanionInner() {
           <div className="header-top">
             <div>
               <div className="attendee-pill">
-                <span>{concertName}</span>
+                <span>Kendrick Lamar</span>
               </div>
               <div className="live-row">
                 <span className="live-dot" />
                 <span className="live-text">LIVE</span>
-                {attendeeCount !== null && (
-                  <span className="attendee-count">{attendeeCount.toLocaleString()} here</span>
-                )}
+                <span className="attendee-count">3,187 here</span>
               </div>
             </div>
             <h1 className="festival-name">Concert Companion</h1>
@@ -448,10 +379,10 @@ function ConcertCompanionInner() {
                 key={b.id}
                 className="vis-bar"
                 style={{
-                  height:          b.h,
-                  "--dur":         `${b.dur}s`,
-                  background:      b.col,
-                  animationDelay:  `${b.del}s`,
+                  height: b.h,
+                  "--dur": `${b.dur}s`,
+                  background: b.col,
+                  animationDelay: `${b.del}s`,
                 }}
               />
             ))}
@@ -471,7 +402,7 @@ function ConcertCompanionInner() {
                     <span className="timestamp">just now</span>
                     <span className="new-badge">PINNED</span>
                   </div>
-                  <p className="post-text">{note.message}</p>
+                  <p className="post-text">{note.messageData}</p>
                   <div className="post-footer">
                     <span className="admin-label">admin update</span>
                     <button
@@ -492,23 +423,22 @@ function ConcertCompanionInner() {
               key={post.id}
               className={[
                 "post",
-                post.isReport ? "is-report" : "",
-                post.pinned   ? "pinned"    : "",
+                post.Type == 2 ? "is-report" : "",
+                post.pinned ? "pinned" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
             >
               <div className="post-body">
                 <div className="post-header">
-                  <span className="username">{safeStr(post.username)}</span>
-                  <span className="timestamp">{post.timestamp}</span>
-                  {post.isNew && <span className="new-badge">NEW</span>}
+                  <span className="username">{safeStr(post.Username)}</span>
+                  <span className="timestamp">{post.Sent}</span>
                 </div>
 
-                {post.text     && <p className="post-text">{post.text}</p>}
-                {post.gifSrc   && (
+                {post.Type == 0 && <p className="post-text">{post.Message}</p>}
+                {post.Type == 1 && (
                   <img
-                    src={post.gifSrc}
+                    src={"data:image/png;base64," + post.Message}
                     alt="gif"
                     style={{ width: "70%", borderRadius: 12, margin: "0 auto 10px", display: "block" }}
                   />
@@ -529,10 +459,10 @@ function ConcertCompanionInner() {
                   )}
                   <button
                     className={`like-btn${post.liked ? " liked" : ""}`}
-                    onClick={() => toggleLike(post.id)}
+                    onClick={() => toggleLike(post.idChatMessage)}
                   >
-                    <span className="heart">{post.liked ? "♥" : "♡"}</span>
-                    <span className="like-count">{post.likes}</span>
+                    <span className="heart">{post.hasUpvoted ? "♥" : "♡"}</span>
+                    <span className="like-count">{post.UpvoteCount}</span>
                   </button>
                 </div>
               </div>
@@ -598,7 +528,7 @@ function ConcertCompanionInner() {
                   {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                     <img
                       key={i}
-                      src={`/Gifs/gif${i}.gif`}
+                      src={`web/Gifs/gif${i}.gif`}
                       className="gif-option"
                       alt={`gif ${i}`}
                       onClick={() => postGif(`/Gifs/gif${i}.gif`)}
@@ -668,14 +598,14 @@ function ConcertCompanionInner() {
             <video ref={videoRef} autoPlay playsInline />
             <div className="camera-controls">
               <button className="camera-close-btn" onClick={closeCamera}>✕</button>
-              <button className="camera-snap-btn"  onClick={snapPhoto}>      <lord-icon
-                  src="https://cdn.lordicon.com/wsaaegar.json"
-                  trigger="loop"
-                  delay="500"
-                  stroke="bold"
-                  colors="primary:#30c9e8,secondary:#16a9c7"
-                  style={{ width: 32, height: 32 }}
-                /></button>
+              <button className="camera-snap-btn" onClick={snapPhoto}>      <lord-icon
+                src="https://cdn.lordicon.com/wsaaegar.json"
+                trigger="loop"
+                delay="500"
+                stroke="bold"
+                colors="primary:#30c9e8,secondary:#16a9c7"
+                style={{ width: 32, height: 32 }}
+              /></button>
             </div>
           </div>
         )}
@@ -693,11 +623,6 @@ function ConcertCompanionInner() {
       </div>
     </>
   );
-}
-
-// Suspense is required by Next.js when using useSearchParams in a client component
-export default function ConcertCompanion() {
-  return <Suspense><ConcertCompanionInner /></Suspense>;
 }
 
 // ── All styles (faithful port of styles.css) ─────────────────────────────────
