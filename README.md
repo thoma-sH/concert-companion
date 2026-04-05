@@ -1,3 +1,4 @@
+# HogHacks 2026 24 hour Hackathon
 ## Concert Companion
 An interactive website that allows for an interactive Live Concert experience!
 Attendees can scan a Concert QR code to join that Concert's Live Feed. In the Live Feed, attendees can chat and send live photos from the concert and it fills the feed! Attendees can also report and notify the live feed about venue/safety. 
