@@ -12,6 +12,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.3.9",
     "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.9.0",
     "jose": "^6.2.2",
     "mysql": "^2.18.1",
     "mysql2": "^3.20.0",

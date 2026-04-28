@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import ConsoleShell from "../components/ConsoleShell";
 
 export default function OnboardPage() {
   const router = useRouter();
@@ -15,184 +16,176 @@ export default function OnboardPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    // Basic validation
     if (activeTab === "signup") {
-      if (!email.includes("@")) {
-        setError("Valid email required");
-        setLoading(false);
-        return;
-      }
-      if (password.length < 6) {
-        setError("Password must be at least 6 characters");
-        setLoading(false);
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError("Passwords don't match");
-        setLoading(false);
-        return;
-      }
+      if (!email.includes("@")) { setError("Valid email required"); setLoading(false); return; }
+      if (password.length < 6)  { setError("Password must be at least 6 characters"); setLoading(false); return; }
+      if (password !== confirmPassword) { setError("Passwords don't match"); setLoading(false); return; }
     } else {
       if (!email.includes("@") || password.length === 0) {
-        setError("Email and password required");
-        setLoading(false);
-        return;
+        setError("Email and password required"); setLoading(false); return;
       }
     }
-    if (activeTab == "signup") {
-      let response = await fetch('/api/venue/register', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: email,
-          password: password,
-          venueName: venueName
-        })
-      })
-      let json_response = await response.json()
-      if (!json_response.success) {
-        setError(json_response.error)
-        setLoading(false)
+
+    if (activeTab === "signup") {
+      const res = await fetch("/api/venue/register", {
+        method: "POST",
+        body: JSON.stringify({ email, password, venueName }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error);
+        setLoading(false);
       } else {
-        setError("")
-        setSuccess(true)
-        setLoading(false)
+        setError(""); setSuccess(true); setLoading(false);
       }
     } else {
-      let response = await fetch('/api/venue/login', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: email,
-          password: password,
-        })
-      })
-      let json_response = await response.json()
-      if (!json_response.success) {
-        setError(json_response.error)
-        setLoading(false)
+      const res = await fetch("/api/venue/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error); setLoading(false);
       } else {
-        router.push("/dashboard")
+        router.push("/dashboard");
       }
     }
   };
 
   const switchTab = (tab) => {
     setActiveTab(tab);
-    setError("");
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setSuccess(false)
+    setError(""); setEmail(""); setPassword(""); setConfirmPassword(""); setSuccess(false);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#050d1a] via-[#071628] to-[#0a1f3d] flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-[#0a1f3d]/60 backdrop-blur-sm rounded-2xl p-6 border border-[#38b6ff]/20 shadow-xl">
-        {/* Back arrow */}
-        <button onClick={() => router.push("/")} className="mb-4 text-[#b0d4ff] hover:text-[#38b6ff] transition">
-          ← Back
-        </button>
+    <ConsoleShell>
+      <button onClick={() => router.push("/")} className="cc-back">← Back to Home</button>
 
-        {/* Tab Switcher */}
-        <div className="flex gap-2 mb-6 bg-[#071628] rounded-full p-1">
-          <button
-            onClick={() => switchTab("signup")}
-            className={`flex-1 py-2 rounded-full text-sm font-medium transition ${activeTab === "signup" ? "bg-[#38b6ff] text-[#050d1a]" : "text-[#b0d4ff] hover:text-white"
-              }`}
-          >
-            Sign Up
-          </button>
-          <button
-            onClick={() => switchTab("login")}
-            className={`flex-1 py-2 rounded-full text-sm font-medium transition ${activeTab === "login" ? "bg-[#38b6ff] text-[#050d1a]" : "text-[#b0d4ff] hover:text-white"
-              }`}
-          >
-            Log In
-          </button>
+      <h1 className="cc-h1" style={{ marginBottom: 6 }}>
+        {activeTab === "signup" ? "Create Venue Account" : "Venue Sign In"}
+      </h1>
+      <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 28 }}>
+        {activeTab === "signup"
+          ? "Register a new venue to schedule concerts and broadcast live experiences."
+          : "Authenticate into the venue console to manage concerts and live rooms."}
+      </p>
+
+      <div className="cc-panel" style={{ maxWidth: 560 }}>
+        <div className="cc-panel__head" style={{ display: "flex", padding: 0, borderBottom: "1px solid var(--border)" }}>
+          <TabBtn active={activeTab === "signup"} onClick={() => switchTab("signup")}>+ Sign Up</TabBtn>
+          <TabBtn active={activeTab === "login"}  onClick={() => switchTab("login")}>+ Log In</TabBtn>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">
-          {activeTab === "signup" ? "Create an account" : "Welcome back"}
-        </h1>
-        <p className="text-[#b0d4ff] text-sm mb-6">
-          {activeTab === "signup" ? "Join Concert Companion to create and manage concerts" : "Sign in to access your dashboard"}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-[#b0d4ff] text-sm mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 rounded-xl bg-[#071628] border border-[#38b6ff]/30 text-white focus:outline-none focus:border-[#38b6ff] transition"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-[#b0d4ff] text-sm mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 rounded-xl bg-[#071628] border border-[#38b6ff]/30 text-white focus:outline-none focus:border-[#38b6ff] transition"
-              required
-            />
-          </div>
-
-          {activeTab === "signup" && (
-            <div>
-              <label className="block text-[#b0d4ff] text-sm mb-1">Confirm Password</label>
+        <div className="cc-panel__body">
+          <form onSubmit={handleSubmit}>
+            <div className="cc-field">
+              <label className="cc-field__label">Email</label>
               <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-xl bg-[#071628] border border-[#38b6ff]/30 text-white focus:outline-none focus:border-[#38b6ff] transition"
-                required
+                type="email" className="cc-input"
+                value={email} onChange={(e) => setEmail(e.target.value)} required
               />
             </div>
-          )}
 
-          {activeTab === "signup" && (
-            <div>
-              <label className="block text-[#b0d4ff] text-sm mb-1">Venue Name</label>
+            <div className="cc-field">
+              <label className="cc-field__label">Password</label>
               <input
-                value={venueName}
-                onChange={(e) => setVenueName(e.target.value)}
-                className="w-full px-4 py-2 rounded-xl bg-[#071628] border border-[#38b6ff]/30 text-white focus:outline-none focus:border-[#38b6ff] transition"
-                required
+                type="password" className="cc-input"
+                value={password} onChange={(e) => setPassword(e.target.value)} required
               />
             </div>
-          )}
-          {activeTab === "login" && (
-            <div className="text-right">
-              <button type="button" className="text-xs text-[#38b6ff] hover:underline" onClick={() => alert("Reset link sent (demo)")}>
-                Forgot password?
-              </button>
-            </div>
-          )}
 
-          {error && <div className="text-red-400 text-sm bg-red-500/10 rounded-lg p-2">{error}</div>}
-          {success && <div className="text-green-400 text-sm bg-red-500/10 rounded-lg p-2">Account created sucessfully, you can now login</div>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 rounded-full bg-[#38b6ff] text-[#050d1a] font-semibold tracking-wide shadow-lg shadow-[#38b6ff]/30 hover:bg-[#5fc4ff] transition disabled:opacity-50 disabled:cursor-not-allowed"
+            {activeTab === "signup" && (
+              <>
+                <div className="cc-field">
+                  <label className="cc-field__label">Confirm Password</label>
+                  <input
+                    type="password" className="cc-input"
+                    value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required
+                  />
+                </div>
+                <div className="cc-field">
+                  <label className="cc-field__label">Venue Name</label>
+                  <input
+                    className="cc-input"
+                    value={venueName} onChange={(e) => setVenueName(e.target.value)} required
+                  />
+                </div>
+              </>
+            )}
+
+            {activeTab === "login" && (
+              <div style={{ textAlign: "right", marginTop: -8, marginBottom: 14 }}>
+                <button
+                  type="button"
+                  onClick={() => alert("Reset link sent (demo)")}
+                  className="cc-mono"
+                  style={{
+                    background: "none", border: "none", color: "var(--text-muted)",
+                    fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", cursor: "pointer",
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            <button type="submit" className="cc-btn cc-btn--block" disabled={loading}>
+              {loading ? "Processing…" : activeTab === "signup" ? "Sign Up" : "Log In"}
+            </button>
+
+            {error && (
+              <div className="cc-feedback cc-feedback--err">
+                <span className="cc-feedback__tag">[ ERR ]</span>{error.toUpperCase()}
+              </div>
+            )}
+            {success && (
+              <div className="cc-feedback cc-feedback--ok">
+                <span className="cc-feedback__tag">[ OK ]</span>ACCOUNT CREATED — YOU CAN NOW LOG IN
+              </div>
+            )}
+          </form>
+
+          <p
+            className="cc-mono"
+            style={{
+              marginTop: 24, color: "var(--text-dim)", fontSize: 10,
+              letterSpacing: "0.14em", textTransform: "uppercase", textAlign: "center",
+            }}
           >
-            {loading ? "Processing..." : activeTab === "signup" ? "Sign Up" : "Log In"}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center text-xs text-[#38b6ff]/40">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
+            By continuing you agree to the Terms & Privacy Policy
+          </p>
         </div>
       </div>
-    </div>
+    </ConsoleShell>
+  );
+}
+
+function TabBtn({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flex: 1,
+        background: active ? "var(--accent-soft)" : "transparent",
+        color: active ? "var(--accent)" : "var(--text-muted)",
+        border: "none",
+        borderRight: "1px solid var(--border)",
+        padding: "12px 16px",
+        fontFamily: "var(--font-mono)",
+        fontSize: 10,
+        letterSpacing: "0.18em",
+        textTransform: "uppercase",
+        cursor: "pointer",
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </button>
   );
 }

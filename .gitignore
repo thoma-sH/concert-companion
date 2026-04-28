@@ -1,1 +1,23 @@
 node_modules*
+
+# Claude Code agent state
+.claude/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# editor / IDE
+.vscode/
+.idea/
+
+# local env / secrets
+.env
+.env.*
+!.env.example
+
+# local SQLite databases (writable, may contain user data)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db

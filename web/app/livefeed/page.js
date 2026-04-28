@@ -1,50 +1,14 @@
 "use client";
 
 export const fetchCache = "force-no-store";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
 import Script from "next/script";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-// ── Constants ──────────────────────────────────────────────────────────────
-const COLORS = [
-  "#007EA7", "#2A9D8F", "#005F7F", "#4db8aa",
-  "#FF331F", "#cc2010", "#ff6652",
-  "#01295F", "#003249", "#00a8cc",
-];
-const LIGHT_SHOW_COLORS = [
-  "#007EA7", "#2A9D8F", "#005F7F", "#4db8aa",
-  "#FF331F", "#cc2010", "#01295F", "#00a8cc",
-];
-const STOP_WORDS = new Set([
-  "the", "a", "an", "is", "it", "in", "on", "at", "to", "of", "and", "or", "but",
-  "this", "that", "was", "were", "i", "my", "we", "they", "he", "she", "so", "are",
-  "for", "with", "not", "its", "be", "has", "had", "have",
-]);
-const SIMILARITY_THRESHOLD = 0.60;
-const ADMIN_NOTES_KEY = "admin_notes";
-const ADMIN_NOTE_DURATION = 10 * 60 * 1000;
 
-function tokenize(str) {
-  return str
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .split(/\s+/)
-    .filter((w) => w && !STOP_WORDS.has(w));
-}
-function similarity(a, b) {
-  const sa = new Set(tokenize(a));
-  const sb = new Set(tokenize(b));
-  if (!sa.size && !sb.size) return 1;
-  const inter = [...sa].filter((w) => sb.has(w)).length;
-  return inter / new Set([...sa, ...sb]).size;
-}
-function safeStr(s) {
-  return String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function randColor(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+const VIS_COLORS = ["#c8ff00", "#9bcc00", "#ffe14d", "#7fff5a", "#aaff66", "#d4ff66"];
 
+function safeStr(s) { return String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function randColor(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function hexToRgb(hex) {
   const bigint = parseInt(hex.slice(1), 16);
   return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
@@ -52,9 +16,8 @@ function hexToRgb(hex) {
 function hslToRgb(h, s, l) {
   h /= 360; s /= 100; l /= 100;
   let r, g, b;
-  if (s === 0) {
-    r = g = b = l;
-  } else {
+  if (s === 0) { r = g = b = l; }
+  else {
     const hue2rgb = (p, q, t) => {
       if (t < 0) t += 1;
       if (t > 1) t -= 1;
@@ -73,11 +36,15 @@ function hslToRgb(h, s, l) {
 }
 
 export default function Page() {
-  return (<Suspense fallback={<div>loading</div>}><ConcertCompanion /></Suspense>)
+  return (
+    <Suspense fallback={<div style={{ padding: 40, color: "var(--text-muted)" }}>► loading</div>}>
+      <ConcertCompanion />
+    </Suspense>
+  );
 }
+
 function ConcertCompanion() {
   const [posts, setPosts] = useState([]);
-  const [adminNotes, setAdminNotes] = useState([]);
   const [composeOpen, setComposeOpen] = useState(false);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -85,14 +52,11 @@ function ConcertCompanion() {
   const [lightBg, setLightBg] = useState("");
   const [messageInput, setMessageInput] = useState("");
   const [reportInput, setReportInput] = useState("");
-  const [dismissedPins, setDismissedPins] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const [lightEffect, setLightEffect] = useState("solid");
-  const [lightBaseColor, setLightBaseColor] = useState("#007EA7");
+  const [lightBaseColor, setLightBaseColor] = useState("#c8ff00");
 
-  const nextId = useRef(10);
-  const reportBuckets = useRef([]);
   const lightInterval = useRef(null);
   const animationFrameId = useRef(null);
   const msgRef = useRef(null);
@@ -106,15 +70,11 @@ function ConcertCompanion() {
     const concertId = searchParams.get("concertId");
     if (!concertId) return;
     fetch(`/api/chat/get?concertId=${concertId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.data)) {
-          setPosts(data.data);
-        } else {
-          console.error("Invalid messages response", data);
-        }
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data)) setPosts(data.data);
       })
-      .catch(err => console.error("Fetch messages error:", err));
+      .catch((err) => console.error("Fetch messages error:", err));
   }
 
   useEffect(() => {
@@ -153,11 +113,11 @@ function ConcertCompanion() {
 
   const visBars = useMemo(
     () =>
-      Array.from({ length: 28 }, (_, i) => ({
+      Array.from({ length: 32 }, (_, i) => ({
         id: i,
-        h: Math.random() * 36 + 12,
-        dur: (Math.random() * 0.6 + 0.5).toFixed(2),
-        col: randColor(COLORS),
+        h: Math.random() * 32 + 10,
+        dur: (Math.random() * 0.6 + 0.4).toFixed(2),
+        col: randColor(VIS_COLORS),
         del: (Math.random() * 0.4).toFixed(2),
       })),
     []
@@ -166,30 +126,21 @@ function ConcertCompanion() {
   useEffect(() => { if (composeOpen) setTimeout(() => msgRef.current?.focus(), 50); }, [composeOpen]);
   useEffect(() => { if (reportOpen) setTimeout(() => rptRef.current?.focus(), 50); }, [reportOpen]);
 
-  function uid() { return nextId.current++; }
-
-  function expireBadge(id) {
-    setTimeout(
-      () => setPosts((p) => p.map((x) => (x.id === id ? { ...x, isNew: false } : x))),
-      10_000
-    );
-  }
-
   function toggleLike(postId) {
-    const post = posts.find(p => p.idChatMessage == postId);
+    const post = posts.find((p) => p.idChatMessage == postId);
     if (!post) return;
     if (post.hasUpvoted) {
       fetch("/api/chat/unheart", {
         method: "POST",
         body: JSON.stringify({ messageId: postId }),
-        headers: { "Content-Type": "application/json" }
-      }).catch(err => console.error("Unheart error:", err));
+        headers: { "Content-Type": "application/json" },
+      }).catch((err) => console.error("Unheart error:", err));
     } else {
       fetch("/api/chat/heart", {
         method: "POST",
         body: JSON.stringify({ messageId: postId }),
-        headers: { "Content-Type": "application/json" }
-      }).catch(err => console.error("Heart error:", err));
+        headers: { "Content-Type": "application/json" },
+      }).catch((err) => console.error("Heart error:", err));
     }
   }
 
@@ -200,15 +151,12 @@ function ConcertCompanion() {
       body: JSON.stringify({
         messageType: "report",
         concertId: searchParams.get("concertId"),
-        messageData: text
-      })
-    }).catch(err => console.error("Report send error:", err));
+        messageData: text,
+      }),
+    }).catch((err) => console.error("Report send error:", err));
   }
 
-  function closeCompose() {
-    setComposeOpen(false);
-    setGifPickerOpen(false);
-  }
+  function closeCompose() { setComposeOpen(false); setGifPickerOpen(false); }
   function closeReport() { setReportOpen(false); }
 
   function sendMessage() {
@@ -219,9 +167,9 @@ function ConcertCompanion() {
       body: JSON.stringify({
         messageType: "message",
         concertId: searchParams.get("concertId"),
-        messageData: messageInput
-      })
-    }).catch(err => console.error("Send message error:", err));
+        messageData: messageInput,
+      }),
+    }).catch((err) => console.error("Send message error:", err));
     setMessageInput("");
     closeCompose();
   }
@@ -236,16 +184,15 @@ function ConcertCompanion() {
 
   async function postGif(src) {
     try {
-      const res = await fetch("/api/chat/post", {
+      await fetch("/api/chat/post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messageType: "gif",
           concertId: searchParams.get("concertId"),
-          messageData: src
-        })
+          messageData: src,
+        }),
       });
-      if (!res.ok) throw new Error("GIF send failed");
       closeCompose();
     } catch (err) {
       console.error("GIF error:", err);
@@ -256,14 +203,14 @@ function ConcertCompanion() {
     const concertId = searchParams.get("concertId");
     if (!concertId) return;
     fetch(`/api/concertState?concertId=${concertId}`)
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         if (data.success) {
           setLightBaseColor(data.color);
           setLightEffect(data.effect);
         }
       })
-      .catch(err => console.error("Light state poll error:", err));
+      .catch((err) => console.error("Light state poll error:", err));
   }
 
   const startLightAnimation = useCallback(() => {
@@ -328,93 +275,78 @@ function ConcertCompanion() {
       <style>{STYLES}</style>
       <Script src="https://cdn.lordicon.com/lordicon.js" strategy="afterInteractive" />
 
-      <div className="app">
-
-        <div className="header">
-          <div className="header-top">
+      <div className="lf-app">
+        <header className="lf-header">
+          <div className="lf-header-row">
             <div>
-              <div className="attendee-pill">
-                <span>Kendrick Lamar</span>
+              <div className="lf-pill">
+                <span className="lf-pill__dot" />
+                <span>LIVE</span>
               </div>
-              <div className="live-row">
-                <span className="live-dot" />
-                <span className="live-text">LIVE</span>
-                <span className="attendee-count">3,187 here</span>
+              <div className="lf-meta">
+                <span className="lf-mono">CONCERT FEED ▸ ONLINE</span>
               </div>
             </div>
-            <h1 className="festival-name">Concert Companion</h1>
+            <div className="lf-brand">// Concert Companion</div>
           </div>
 
-          <div className="visualizer" style={{ cursor: "pointer" }} onClick={openLightShow}>
+          <div className="lf-vis" onClick={openLightShow} title="Tap for light show">
             {visBars.map((b) => (
               <div
                 key={b.id}
-                className="vis-bar"
-                style={{
-                  height: b.h,
-                  "--dur": `${b.dur}s`,
-                  background: b.col,
-                  animationDelay: `${b.del}s`,
-                }}
+                className="lf-vis-bar"
+                style={{ height: b.h, "--dur": `${b.dur}s`, background: b.col, animationDelay: `${b.del}s` }}
               />
             ))}
           </div>
-        </div>
+        </header>
 
-        <div className="feed" ref={feedRef} onScroll={handleFeedScroll}>
+        <div className="lf-feed" ref={feedRef} onScroll={handleFeedScroll}>
+          {sortedPosts.length === 0 && (
+            <p className="lf-empty">► No posts yet. Be the first to drop a vibe.</p>
+          )}
           {sortedPosts.map((post) => (
-            <div
+            <article
               key={post.idChatMessage}
               className={[
-                "post",
+                "lf-post",
                 post.Type == 20 ? "is-report" : "",
                 post.pinned ? "pinned" : "",
               ].filter(Boolean).join(" ")}
             >
-              <div className="post-body">
-                <div className="post-header">
-                  <span className="username">{safeStr(post.Username)}</span>
-                  <span className="timestamp">{post.Sent}</span>
-                </div>
-
-                {(post.Type == 0 || post.Type == 20) && <p className="post-text">{post.Message}</p>}
-                {post.Type == 1 && (
-                  <img
-                    src={post.Message}
-                    alt="photo"
-                    style={{ width: "70%", borderRadius: 12, margin: "0 auto 10px", display: "block" }}
-                  />
-                )}
-                {post.Type == 4 && (
-                  <img
-                    src={post.Message}
-                    alt="gif"
-                    style={{ width: "100%", borderRadius: 12, marginBottom: 10 }}
-                  />
-                )}
-
-                <div className="post-footer">
-                  {post.isReport && (
-                    <span className="report-count">
-                      {post.reportCount} report{post.reportCount !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  <button
-                    className={`like-btn${post.liked ? " liked" : ""}`}
-                    onClick={() => toggleLike(post.idChatMessage)}
-                  >
-                    <span className="heart">{post.hasUpvoted ? "♥" : "♡"}</span>
-                    <span className="like-count">{post.UpvoteCount}</span>
-                  </button>
-                </div>
+              <div className="lf-post-head">
+                <span className="lf-username">{safeStr(post.Username)}</span>
+                <span className="lf-ts">{post.Sent}</span>
               </div>
-            </div>
+
+              {(post.Type == 0 || post.Type == 20) && (
+                <p className="lf-text">{post.Message}</p>
+              )}
+              {post.Type == 1 && (
+                <img src={post.Message} alt="photo" className="lf-img" />
+              )}
+              {post.Type == 4 && (
+                <img src={post.Message} alt="gif" className="lf-img" style={{ width: "100%" }} />
+              )}
+
+              <div className="lf-post-foot">
+                {post.isReport && (
+                  <span className="lf-rpt">
+                    {post.reportCount} report{post.reportCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+                <button className={`lf-like${post.hasUpvoted ? " liked" : ""}`} onClick={() => toggleLike(post.idChatMessage)}>
+                  <span className="lf-heart">{post.hasUpvoted ? "♥" : "♡"}</span>
+                  <span>{post.UpvoteCount}</span>
+                </button>
+              </div>
+            </article>
           ))}
         </div>
 
         {unreadCount > 0 && (
           <button
-            className="new-messages-pill"
+            className="lf-new-pill"
             onClick={() => {
               feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
               lastSeenCount.current = posts.length;
@@ -422,119 +354,102 @@ function ConcertCompanion() {
               isUserScrolledUp.current = false;
             }}
           >
-            ↓ New messages
+            ↓ {unreadCount} NEW
           </button>
         )}
 
-        <div className="bottom-bar">
-          <button className="lights-btn" onClick={openLightShow}>
-            <span className="lights-btn__label">
-              join the<br />
-              <strong>light show</strong>
-            </span>
+        <div className="lf-bottom">
+          <button className="lf-lights" onClick={openLightShow}>
+            <span className="lf-lights__txt">JOIN<br /><strong>LIGHT SHOW</strong></span>
           </button>
 
-          <div className="smallContainer">
+          <div className="lf-actions">
             <button
-              className={`nav-btn nav-btn--center${composeOpen ? " open" : ""}`}
+              className={`lf-fab${composeOpen ? " open" : ""}`}
               onClick={(e) => {
                 e.stopPropagation();
                 closeReport();
                 setComposeOpen((o) => !o);
                 setGifPickerOpen(false);
               }}
+              aria-label="Compose"
             >
-              <span style={{ marginBottom: 5 }}>&#43;</span>
+              +
             </button>
-
             <button
-              className="nav-btn"
+              className="lf-fab lf-fab--ghost"
               onClick={(e) => {
                 e.stopPropagation();
                 closeCompose();
                 setReportOpen((o) => !o);
               }}
+              aria-label="Report"
             >
-              <lord-icon
-                src="https://cdn.lordicon.com/lltgvngb.json"
-                trigger="loop"
-                delay="1000"
-                stroke="bold"
-                colors="primary:#30c9e8,secondary:#16a9c7"
-                style={{ width: 50, height: 50, marginBottom: 10 }}
-              />
+              ⚑
             </button>
           </div>
         </div>
 
         {composeOpen && (
-          <div className="compose-overlay open" onClick={closeCompose}>
+          <div className="lf-overlay" onClick={closeCompose}>
             {gifPickerOpen && (
-              <div className="gif-picker open" onClick={(e) => e.stopPropagation()}>
-                <div className="gif-grid">
+              <div className="lf-gifpick" onClick={(e) => e.stopPropagation()}>
+                <div className="lf-gif-grid">
                   {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                     <img
-                      key={i}
-                      src={`Gifs/gif${i}.gif`}
-                      className="gif-option"
-                      alt={`gif ${i}`}
+                      key={i} src={`Gifs/gif${i}.gif`} alt={`gif ${i}`}
+                      className="lf-gif-opt"
                       onClick={() => postGif(`/Gifs/gif${i}.gif`)}
                     />
                   ))}
                 </div>
               </div>
             )}
-
-            <div className="compose-panel" onClick={(e) => e.stopPropagation()}>
-              {/* Camera button removed */}
+            <div className="lf-composer" onClick={(e) => e.stopPropagation()}>
               <input
                 ref={msgRef}
-                className="compose-input"
+                className="lf-input"
                 type="text"
-                placeholder="Share the vibe..."
+                placeholder="Share the vibe…"
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               />
               <button
-                className={`gif-toggle-btn${gifPickerOpen ? " active" : ""}`}
+                className={`lf-gif-btn${gifPickerOpen ? " active" : ""}`}
                 onClick={(e) => { e.stopPropagation(); setGifPickerOpen((o) => !o); }}
               >
                 GIF
               </button>
-              <button className="send-btn" onClick={sendMessage}>
-                &#10148;
-              </button>
+              <button className="lf-send" onClick={sendMessage}>➤</button>
             </div>
           </div>
         )}
 
         {reportOpen && (
-          <div className="report-overlay open" onClick={closeReport}>
-            <div className="report-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="lf-overlay" onClick={closeReport}>
+            <div className="lf-composer lf-composer--rpt" onClick={(e) => e.stopPropagation()}>
               <input
                 ref={rptRef}
-                className="report-input"
+                className="lf-input lf-input--rpt"
                 type="text"
-                placeholder="what happened..."
+                placeholder="what happened…"
                 value={reportInput}
                 onChange={(e) => setReportInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendReport()}
               />
-              <button className="report-send-btn" onClick={sendReport}>
-                ⚑
-              </button>
+              <button className="lf-send lf-send--rpt" onClick={sendReport}>⚑</button>
             </div>
           </div>
         )}
 
         {lightshowOpen && (
           <div
-            className="lightshow-overlay open"
-            style={{ backgroundColor: lightBg, transition: "background-color 0.02s linear" }}
+            className="lf-lightshow"
+            style={{ backgroundColor: lightBg }}
             onClick={closeLightShow}
           >
-            <span className="lightshow-tap-hint">tap to close</span>
+            <span className="lf-lightshow__hint">▼ tap to close</span>
           </div>
         )}
       </div>
@@ -543,413 +458,367 @@ function ConcertCompanion() {
 }
 
 const STYLES = `
-    :root {
-      --bg:          #0a0a12;
-    --bg-bar:      #0d0c1a;
-    --surface:     #13121e;
-    --surface-2:   #1e1b2e;
-    --border:      #2e2b42;
-    --border-hi:   #002A32;
-    --accent:      #003249;
-    --accent-dark: #002642;
-    --accent-soft: #007EA7;
-    --accent-pale: #2A9D8F;
-    --pink:        #2A9D8F;
-    --pink-dark:   #01295F;
-    --muted:       #52525b;
-    --subtle:      #71717a;
-    --text:        #e4e4f0;
-    --white:       #fff;
-  }
+  body { background: var(--bg); }
 
-    *, *::before, *::after {margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {min - height: 100%; background: var(--bg); }
-    body {
-      color: var(--white);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    display: flex;
-    justify-content: center;
-  }
-
-    .app {
-      width: 100%;
-    max-width: 400px;
+  .lf-app {
+    width: 100%;
+    max-width: 440px;
     min-height: 100vh;
+    margin: 0 auto;
+    background: var(--bg);
     display: flex;
     flex-direction: column;
-    background: var(--bg);
     position: relative;
-    margin: 0 auto;
   }
+  .lf-mono { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; }
 
-  .header { padding: 20px 16px 0; background: var(--bg); }
-  .header-top {
+  .lf-header {
+    padding: 18px 16px 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .lf-header-row {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     margin-bottom: 12px;
   }
-    .festival-name {
-      font - size: 15px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    color: var(--white);
-    text-decoration: underline;
+  .lf-brand {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    font-weight: 700;
   }
-    .live-row {display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-    .live-dot {
-      width: 8px; height: 8px;
-    background: var(--pink);
+
+  .lf-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    padding: 3px 10px;
+    margin-bottom: 6px;
+  }
+  .lf-pill__dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
     border-radius: 50%;
-    animation: pulse 1.4s infinite;
+    animation: lf-pulse 1.4s infinite;
     display: inline-block;
   }
-    @keyframes pulse {0 %, 100 % { opacity: 1; } 50% {opacity: 0.3; } }
-    .live-text  {font - size: 11px; font-weight: 700; color: var(--pink); letter-spacing: 1px; }
-    .attendee-count {font - size: 11px; color: var(--subtle); }
-    .attendee-pill {
-      display: flex; align-items: center; gap: 5px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 5px 12px;
-    font-size: 13px; font-weight: 600;
-    color: var(--accent-pale);
-  }
+  @keyframes lf-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .lf-meta { color: var(--text-dim); }
 
-  .visualizer { display: flex; align-items: flex-end; gap: 3px; padding: 0 2px; }
-  .vis-bar {
+  .lf-vis {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    padding: 4px 0 12px;
+    cursor: pointer;
+    height: 56px;
+  }
+  .lf-vis-bar {
     flex: 1;
-    border-radius: 3px 3px 0 0;
-    animation: bounce var(--dur, 0.8s) ease-in-out infinite alternate;
+    border-radius: 1px 1px 0 0;
+    animation: lf-bounce var(--dur, 0.8s) ease-in-out infinite alternate;
     transform-origin: bottom;
   }
-    @keyframes bounce {from {transform: scaleY(0.15); } to {transform: scaleY(1); } }
+  @keyframes lf-bounce { from { transform: scaleY(0.15); } to { transform: scaleY(1); } }
 
-  .feed {
+  .lf-feed {
     position: fixed;
-    top: 130px;
-    bottom: 80px;
+    top: 142px;
+    bottom: 96px;
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
-    max-width: 400px;
-    padding: 12px;
+    max-width: 440px;
+    padding: 14px 16px 24px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     overflow-y: auto;
-    padding-bottom: 20px;
+  }
+  .lf-empty {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-align: center;
+    padding-top: 60px;
   }
 
-  .post {
-    background: var(--surface);
-    border: 1px solid var(--surface-2);
-    border-radius: 18px;
-    padding: 14px;
+  .lf-post {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    transition: border-color 120ms;
+  }
+  .lf-post:hover { border-color: var(--border-mid); }
+  .lf-post-head {
     display: flex;
-    gap: 12px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
   }
-    .post-body   {flex: 1; min-width: 0; }
-    .post-header {
-      display: flex; align-items: center;
-    gap: 8px; margin-bottom: 6px;
-    flex-wrap: wrap;
+  .lf-username {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
   }
-    .username  {font - size: 13px; font-weight: 700; color: var(--accent-soft); }
-    .timestamp {font - size: 11px; color: var(--muted); }
-    .new-badge {
-      background: var(--pink-dark);
-    color: var(--white);
-    font-size: 10px; font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 999px;
-    letter-spacing: 0.5px;
+  .lf-ts {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
     margin-left: auto;
   }
-    .post-text {font - size: 14px; color: var(--text); line-height: 1.5; margin-bottom: 10px; }
-    .post-footer {display: flex; align-items: center; justify-content: space-between; }
-
-    .like-btn {
-      display: flex; align-items: center; gap: 5px;
-    background: none; border: none;
-    color: var(--muted); font-size: 13px;
-    cursor: pointer; padding: 0;
-    transition: color 0.15s;
+  .lf-text {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+    margin: 4px 0 8px;
+    word-break: break-word;
   }
-    .like-btn.liked {color: var(--pink); }
-    .like-btn .heart, .heart {font - size: 15px; }
-    .like-count {font - size: 13px; }
-    .report-count {font - size: 11px; color: var(--subtle); }
-
-  .post.is-report {
-    border-color: #FF331F44;
-    background: color-mix(in srgb, var(--surface) 85%, #FF331F 15%);
+  .lf-img {
+    width: 70%;
+    border: 1px solid var(--border);
+    margin: 6px auto;
+    display: block;
   }
-    .post.is-report .post-text {color: #ff9a8d; }
-    .post.is-report .username  {color: #FF331F; }
-    .post.pinned {
-      border - color: #FF331F;
-    box-shadow: 0 0 12px #FF331F44;
+  .lf-post-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+  .lf-rpt {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .lf-like {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    transition: color 120ms;
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+  }
+  .lf-like.liked, .lf-like:hover { color: var(--accent); }
+  .lf-heart { font-size: 16px; }
+
+  .lf-post.is-report {
+    border-color: rgba(255,77,77,0.35);
+    background: rgba(255,77,77,0.04);
+  }
+  .lf-post.is-report .lf-text { color: #ffaaa3; }
+  .lf-post.is-report .lf-username { color: var(--danger); }
+  .lf-post.pinned {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 1px rgba(255,77,77,0.3);
     order: -1;
   }
-    .post.pinned::before {
-      content: 'PINNED REPORT';
+  .lf-post.pinned::before {
+    content: 'PINNED REPORT';
     display: block;
-    font-size: 9px; font-weight: 800; letter-spacing: 1px;
-    color: #FF331F; margin-bottom: 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    color: var(--danger);
+    margin-bottom: 6px;
   }
 
-  .new-messages-pill {
+  .lf-new-pill {
     position: fixed;
-    bottom: 100px;
+    bottom: 110px;
     left: 50%;
     transform: translateX(-50%);
-    background: var(--accent-soft);
-    color: var(--white);
-    border: none;
-    border-radius: 999px;
-    padding: 7px 18px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 2px 12px rgba(0, 126, 167, 0.5);
-    z-index: 15;
-    animation: pill-pop 0.2s ease;
-    letter-spacing: 0.3px;
-  }
-  @keyframes pill-pop {
-    from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-  }
-
-  .bottom-bar {
-    position: fixed; bottom: 0;
-    left: 50%; transform: translateX(-50%);
-    width: 100%; max-width: 400px;
-    background: var(--bg-bar);
-    border-top: 1px solid var(--border);
-    padding: 12px 2px 8px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .lights-btn {
-    position: fixed; bottom: 0; left: 0;
-    width: 135px; height: 80px;
-    border-radius: 0 50px 0 0;
-    border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    gap: 8px; overflow: hidden; padding: 0 14px;
-    background: linear-gradient(120deg, #007EA7, #2A9D8F, #FF331F, #00a8cc, #007EA7);
-    background-size: 300% 300%;
-    animation: lights-shift 3s ease infinite;
-    box-shadow: 0 0 16px 4px #007EA780;
-  }
-    .lights-btn::before {
-      content: '';
-    position: absolute; inset: 2px;
-    border-radius: 0 49px 0 0;
-    background: var(--bg-bar);
-    z-index: 0;
-  }
-    .lights-btn__label {
-      position: relative; z-index: 1;
-    font-size: 15px; font-weight: 500; line-height: 1.4; text-align: left;
-    background: linear-gradient(120deg, #007EA7, #2A9D8F, #FF331F, #00a8cc, #007EA7);
-    background-size: 300% 300%;
-    animation: lights-shift 3s ease infinite;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-    .lights-btn__label strong {font - size: 18px; font-weight: 800; letter-spacing: 0.3px; }
-    .lights-btn:active {opacity: 0.85; }
-
-    @keyframes lights-shift {
-      0 % { background- position: 0% 50%; }
-    50%  {background - position: 100% 50%; }
-    100% {background - position: 0% 50%; }
-  }
-
-    /* Nav buttons */
-    .nav-btn {
-      width: 76px; height: 76px;
-    border-radius: 50%;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--subtle); font-size: 20px;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, transform 0.1s;
-  }
-    .nav-btn:active {transform: scale(0.9); }
-
-    .nav-btn--center {
-      width: 72px; height: 72px;
-    font-size: 28px;
     background: var(--accent);
-    border-color: var(--accent-soft);
-    color: var(--white);
-    box-shadow: 0 0 20px rgba(0,50,73,0.8);
-    transition: transform 0.2s, background 0.15s;
-  }
-    .nav-btn--center.open {
-      transform: rotate(45deg);
-    background: var(--surface-2);
-    border-color: var(--border);
-    box-shadow: none;
-  }
-
-    .smallContainer {
-      display: flex;
-    flex-direction: row;
-    width: 200px;
-    margin-left: auto;
-    justify-content: space-between;
-    align-items: center;
+    color: #000;
+    border: none;
+    padding: 7px 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    cursor: pointer;
+    z-index: 15;
+    box-shadow: 0 4px 16px rgba(200,255,0,0.3);
   }
 
-    /* Compose overlay */
-    .compose-overlay {display: none; position: fixed; inset: 0; z-index: 20; }
-    .compose-overlay.open {display: block; }
-
-    .compose-panel {
-      position: absolute;
-    bottom: 106px;
-    left: 50%; transform: translateX(-50%);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px; padding: 12px;
+  .lf-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 440px;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    padding: 12px;
     display: flex;
     align-items: center;
-    gap: 6px;
-    width: calc(100% - 48px);
-    max-width: 352px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    justify-content: space-between;
+    gap: 12px;
   }
 
-    /* Camera-related styles removed (photo-preview, cam-btn, etc.) */
-
-    .compose-input {
-      flex: 1;
-    background: var(--surface-2);
-    border: 1px solid var(--border-hi);
-    border-radius: 999px;
-    padding: 10px 0 10px 5px;
-    font-size: 13px; color: var(--white);
-    outline: none;
-    font-family: inherit;
-  }
-    .compose-input::placeholder {color: var(--muted); }
-    .compose-input:focus {border - color: var(--accent-soft); }
-
-    .send-btn {
-      width: 38px; height: 38px;
-    border-radius: 50%;
-    background: var(--accent); border: none;
-    color: var(--white); font-size: 17px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; transition: background 0.15s;
-  }
-    .send-btn:active {background: var(--accent-dark); }
-
-    .gif-toggle-btn {
-      background: var(--surface-2);
-    border: 1px solid var(--border-hi);
-    border-radius: 999px;
-    color: var(--accent-soft);
-    font-size: 11px; font-weight: 800; letter-spacing: 1px;
-    padding: 0 10px; height: 38px;
-    cursor: pointer; flex-shrink: 0;
-    transition: background 0.15s;
-  }
-    .gif-toggle-btn.active {
-      background: var(--accent);
-    border-color: var(--accent);
-    color: var(--white);
-  }
-
-    /* GIF picker */
-    .gif-picker {
-      display: none;
-    position: absolute;
-    bottom: 168px;
-    left: 50%; transform: translateX(-50%);
-    width: calc(100% - 48px); max-width: 352px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px; padding: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  }
-    .gif-picker.open {display: block; }
-    .gif-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .gif-option {
-      width: 100%; aspect-ratio: 1; object-fit: cover;
-    border-radius: 12px; cursor: pointer;
-    border: 2px solid transparent;
-    transition: border-color 0.15s, transform 0.1s;
-  }
-    .gif-option:hover, .gif-option:active {
-      border - color: var(--accent-soft);
-    transform: scale(0.96);
-  }
-
-    /* Report overlay */
-    .report-overlay {display: none; position: fixed; inset: 0; z-index: 20; }
-    .report-overlay.open {display: block; }
-
-    .report-panel {
-      position: absolute;
-    bottom: 106px;
-    left: 50%; transform: translateX(-50%);
-    background: var(--surface);
-    border: 1px solid #FF331F55;
-    border-radius: 20px; padding: 12px;
-    display: flex; align-items: center; gap: 8px;
-    width: calc(100% - 48px); max-width: 352px;
-    box-shadow: 0 8px 32px rgba(255,51,31,0.15);
-  }
-
-    .report-input {
-      flex: 1;
-    background: var(--surface-2);
-    border: 1px solid #FF331F55;
-    border-radius: 999px;
-    padding: 10px 16px;
-    font-size: 13px; color: var(--white);
-    outline: none; font-family: inherit;
-  }
-    .report-input::placeholder {color: #FF331F88; }
-    .report-input:focus {border - color: #FF331F; }
-
-    .report-send-btn {
-      width: 38px; height: 38px;
-    border-radius: 50%;
-    background: #FF331F; border: none;
-    color: var(--white); font-size: 17px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; transition: background 0.15s;
-  }
-    .report-send-btn:active {background: #cc2010; }
-
-    /* Camera overlay removed */
-
-    /* Light show overlay */
-    .lightshow-overlay {
-      display: none; position: fixed; inset: 0; z-index: 100;
+  .lf-lights {
+    flex: 1;
+    height: 64px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #000;
     cursor: pointer;
-    transition: background-color 0.4s ease;
-    align-items: center; justify-content: center;
-    flex-direction: column; gap: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 14px;
+    font-family: var(--font-mono);
+    transition: filter 120ms;
   }
-    .lightshow-overlay.open {display: flex; }
-    .lightshow-tap-hint {
-      color: rgba(255,255,255,0.3);
-    font-size: 13px; letter-spacing: 2px;
-    text-transform: uppercase; pointer-events: none;
-    animation: hint-fade 2s ease-in-out infinite alternate;
+  .lf-lights:hover { filter: brightness(1.1); }
+  .lf-lights__txt {
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.18em;
+    text-align: left;
   }
-    @keyframes hint-fade {from {opacity: 0.2; } to {opacity: 0.7; } }
-    `;
+  .lf-lights__txt strong { font-size: 14px; font-weight: 800; letter-spacing: 0.12em; }
+
+  .lf-actions { display: flex; gap: 10px; }
+  .lf-fab {
+    width: 64px;
+    height: 64px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 120ms, transform 120ms;
+    font-family: var(--font-mono);
+  }
+  .lf-fab:hover { background: var(--accent-soft); }
+  .lf-fab.open { transform: rotate(45deg); }
+  .lf-fab--ghost { color: var(--text-muted); border-color: var(--border-mid); font-size: 18px; }
+  .lf-fab--ghost:hover { color: var(--danger); border-color: var(--danger); background: rgba(255,77,77,0.08); }
+
+  .lf-overlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
+  }
+
+  .lf-composer {
+    position: absolute;
+    bottom: 92px;
+    left: 50%; transform: translateX(-50%);
+    background: var(--bg-panel);
+    border: 1px solid var(--accent);
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: calc(100% - 32px);
+    max-width: 408px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  .lf-composer--rpt { border-color: var(--danger); }
+
+  .lf-input {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border-mid);
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    font-family: var(--font-sans);
+  }
+  .lf-input::placeholder { color: var(--text-dim); }
+  .lf-input:focus { border-color: var(--accent); }
+  .lf-input--rpt:focus { border-color: var(--danger); }
+  .lf-input--rpt::placeholder { color: rgba(255,77,77,0.5); }
+
+  .lf-send {
+    width: 40px; height: 40px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: filter 120ms;
+  }
+  .lf-send:hover { filter: brightness(1.1); }
+  .lf-send--rpt { background: var(--danger); color: #fff; }
+
+  .lf-gif-btn {
+    background: var(--bg-input);
+    border: 1px solid var(--border-mid);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    padding: 0 12px;
+    height: 40px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .lf-gif-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+  .lf-gifpick {
+    position: absolute;
+    bottom: 156px;
+    left: 50%; transform: translateX(-50%);
+    width: calc(100% - 32px); max-width: 408px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 10px;
+  }
+  .lf-gif-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .lf-gif-opt {
+    width: 100%; aspect-ratio: 1; object-fit: cover;
+    cursor: pointer; border: 1px solid transparent;
+    transition: border-color 120ms;
+  }
+  .lf-gif-opt:hover { border-color: var(--accent); }
+
+  .lf-lightshow {
+    position: fixed; inset: 0; z-index: 100;
+    cursor: pointer;
+    transition: background-color 0.06s linear;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lf-lightshow__hint {
+    color: rgba(0,0,0,0.55);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    pointer-events: none;
+    animation: lf-fade 2s ease-in-out infinite alternate;
+  }
+  @keyframes lf-fade { from { opacity: 0.3; } to { opacity: 0.8; } }
+`;
